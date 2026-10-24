@@ -483,6 +483,9 @@ const TERM_STOPWORDS = (function(){
   return o;
 })();
 
+// 术语查询内存缓存：正文取词会反复点同一个词，避免重复请求
+const TERM_CACHE = {};
+
 // 拆分 en 字段（可能是 "a,b" 或 "neuron(拉)" 形态）为候选英文名
 function termEnVariants(en){
   const out = [];
@@ -537,6 +540,11 @@ async function fetchTermOnline(term){
   const q = String(term || '').trim();
   if(!q) return null;
   if(TERM_STOPWORDS[q.toLowerCase()]) return null;   // 提前跳过，省一次请求
+
+  // 内存缓存：同一词不重复请求（正文取词会频繁点同一个词）
+  const ck = q.toLowerCase();
+  if(TERM_CACHE.hasOwnProperty(ck)) return TERM_CACHE[ck];
+
   const url = 'https://www.termonline.cn/main-serve/business/tm/tmWord/drawWordSearch?term=' +
               encodeURIComponent(q);
   try{
@@ -544,9 +552,12 @@ async function fetchTermOnline(term){
       'Accept':'application/json, text/plain, */*'
     }, 9000);
     const r = (j && j.result) || null;
-    if(!r || (!r.cn && !r.en)) return null;
-    if(!termIsRelevant(q, r)) return null;           // 过滤误命中
-    return r;
+    let out = null;
+    if(r && (r.cn || r.en) && termIsRelevant(q, r)) out = r;   // 过滤误命中
+    // 只缓存「有结果」与「明确未收录」，避免网络抖动把失败也缓存住
+    if(out) TERM_CACHE[ck] = out;
+    else if(r) TERM_CACHE[ck] = null;
+    return out;
   }catch(e){
     return null;
   }
@@ -747,6 +758,19 @@ function showWord(word, el){
   renderDict(res ? res.entry : null, word);
   // 手机竖屏：把词典窗浮到被点单词下方（没传元素时贴底显示）
   if(typeof window.openDictSheet === 'function') window.openDictSheet(el || null);
+
+  // 正文取词也补一张权威术语卡（专业词才命中，功能词已被过滤）
+  const seq = _searchSeq;   // 复用查词序号，避免过期结果覆盖
+  Promise.resolve(fetchTermOnline(word)).then(function(t){
+    if(!t || seq !== _searchSeq) return;
+    // 用户已在别处查过别的词，就不追加
+    if(currentLookupWord !== word) return;
+    const card = document.createElement('div');
+    card.innerHTML = termCardHtml(t);
+    const node = card.firstElementChild;
+    if(node) dictBody.appendChild(node);
+    bindTermMore(t);
+  }).catch(function(){});
 }
 
 // 术语在线：联网跳转到权威科技术语平台查标准译名

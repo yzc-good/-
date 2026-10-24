@@ -394,6 +394,9 @@ const TERM_STOPWORDS = (function(){
   return o;
 })();
 
+// 术语查询内存缓存：正文取词会反复点同一个词，避免重复请求
+const TERM_CACHE = {};
+
 function termEnVariants(en){
   const out = [];
   String(en || '').split(/[,;，；]/).forEach(function(part){
@@ -438,6 +441,11 @@ async function fetchTermOnline(term){
   const q = String(term || '').trim();
   if(!q) return null;
   if(TERM_STOPWORDS[q.toLowerCase()]) return null;
+
+  // 内存缓存：同一词不重复请求
+  const ck = q.toLowerCase();
+  if(TERM_CACHE.hasOwnProperty(ck)) return TERM_CACHE[ck];
+
   const url = 'https://www.termonline.cn/main-serve/business/tm/tmWord/drawWordSearch?term=' +
               encodeURIComponent(q);
   try{
@@ -450,9 +458,11 @@ async function fetchTermOnline(term){
     clearTimeout(tid);
     const j = await r.json();
     const res = (j && j.result) || null;
-    if(!res || (!res.cn && !res.en)) return null;
-    if(!termIsRelevant(q, res)) return null;
-    return res;
+    let out = null;
+    if(res && (res.cn || res.en) && termIsRelevant(q, res)) out = res;
+    if(out) TERM_CACHE[ck] = out;
+    else if(res) TERM_CACHE[ck] = null;
+    return out;
   }catch(e){
     return null;
   }
@@ -634,6 +644,17 @@ function showWord(word){
   currentLookupWord = word || '';
   const res = lookup(word);
   renderDict(res ? res.entry : null, word);
+
+  // 正文取词也补一张权威术语卡（专业词才命中，功能词已被过滤）
+  Promise.resolve(fetchTermOnline(word)).then(function(t){
+    if(!t) return;
+    if(currentLookupWord !== word) return;   // 已切换到别的词，丢弃过期结果
+    const card = document.createElement('div');
+    card.innerHTML = termCardHtml(t);
+    const node = card.firstElementChild;
+    if(node) dictBody.appendChild(node);
+    bindTermMore(t);
+  }).catch(function(){});
 }
 
 // 术语在线：联网跳转到权威科技术语平台查标准译名
