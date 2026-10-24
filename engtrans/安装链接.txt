@@ -1,0 +1,29 @@
+【中英翻译工具 App 安装链接】
+版本：v1.6（versionCode 7）
+大小：4.17 MB
+
+────────────────────────────
+直接把下面任意一个网址复制到手机浏览器粘贴打开，
+浏览器会自动下载安装包（4.17MB）。
+下载完成后，下拉通知栏，点那条「已下载完成」通知，
+就会弹出系统安装界面 → 点「安装」即可完成。
+
+若提示「为安装此应用，请允许安装未知应用」，
+点「设置」→ 打开「允许来自此来源」→ 返回重试即可。
+
+────────────────────────────
+一、GitHub 官方源
+https://raw.githubusercontent.com/yzc-good/-/main/update/EnglishTranslator-v1.6.apk
+
+二、镜像源 1（推荐，国内更快）
+https://ghfast.top/https://raw.githubusercontent.com/yzc-good/-/main/update/EnglishTranslator-v1.6.apk
+
+三、镜像源 2
+https://gh-proxy.com/https://raw.githubusercontent.com/yzc-good/-/main/update/EnglishTranslator-v1.6.apk
+
+四、镜像源 3
+https://ghproxy.net/https://raw.githubusercontent.com/yzc-good/-/main/update/EnglishTranslator-v1.6.apk
+
+────────────────────────────
+提示：若第一个打不开或很慢，就换另一个镜像。
+都打不开通常是网络到 GitHub 不稳定，换个网络（如手机热点）再试。
