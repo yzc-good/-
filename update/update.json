@@ -1,6 +1,6 @@
 {
   "android": {
-    "webVersion": 8,
+    "webVersion": 9,
     "type": "both",
     "apk": {
       "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/EnglishTranslator-v1.6.apk",
@@ -11,10 +11,10 @@
     },
     "files": [
       {
-        "name": "web-8.zip",
-        "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/web-8.zip",
-        "size": 1162539,
-        "sha256": "d628b853be826a7cf5739c7289a3a123fdde91cff635df152e21e3bda6090046"
+        "name": "web-9.zip",
+        "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/web-9.zip",
+        "size": 1164791,
+        "sha256": "2a50d3e94ed4aa66bfaf9e4c66c512a2c1ee9ec435fd8fcad2039c6d3a6d9874"
       }
     ]
   }
