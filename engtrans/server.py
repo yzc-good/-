@@ -190,6 +190,74 @@ def split_sentences(text: str):
     return out
 
 
+# ---------------- 中英双向：方向识别与文档切分 ----------------
+_NOISE_RES = [
+    re.compile(r'^change\s+times', re.I),
+    re.compile(r'粉丝团'),
+    re.compile(r'^[\d\s.\-–—|/]+$'),
+    re.compile(r'^第\s*[0-9０-９一二三四五六七八九十百千]+\s*页\s*$'),
+    re.compile(r'^page\s*\d+(\s*(of|/)\s*\d+)?$', re.I),
+    re.compile(r'^\d+\s*/\s*\d+$'),
+]
+
+
+def is_noise_line(s: str) -> bool:
+    t = (s or '').strip()
+    if not t:
+        return True
+    return any(r.search(t) for r in _NOISE_RES)
+
+
+def detect_dir(s: str) -> str:
+    """判断一段文本的方向：en2zh / zh2en（一个汉字≈两个拉丁字母）。"""
+    t = s or ''
+    cjk = len(_CJK_RE.findall(t))
+    lat = len(_LATIN_RE.findall(t))
+    if cjk == 0:
+        return 'en2zh'
+    if lat == 0:
+        return 'zh2en'
+    return 'zh2en' if cjk * 2 >= lat else 'en2zh'
+
+
+def _classify_blocks(text: str):
+    """按语言把整篇文本切块（空行分段）。返回 [(dir, text)]。"""
+    blocks = []
+    cur = None
+    for ln in (text or '').split('\n'):
+        t = ln.strip()
+        if not t:
+            cur = None
+            continue
+        if is_noise_line(t):
+            continue
+        d = detect_dir(t)
+        if cur is None or cur[0] != d:
+            cur = [d, '']
+            blocks.append(cur)
+        cur[1] += ('\n' if cur[1] else '') + t
+    return [(b[0], b[1]) for b in blocks]
+
+
+def split_document(text: str):
+    """中英双语的文档切分。返回 [(句子, 方向)]。"""
+    out = []
+    for d, block in _classify_blocks(text):
+        if d == 'zh2en':
+            for ln in block.split('\n'):
+                ln = ln.strip()
+                if not ln or is_noise_line(ln):
+                    continue
+                for p in re.split(r'(?<=[。！？；])', ln):
+                    p = p.strip()
+                    if p and _CJK_RE.search(p):
+                        out.append((p, 'zh2en'))
+        else:
+            for s in split_sentences(block):
+                out.append((s, 'en2zh'))
+    return out
+
+
 # ---------------- 在线翻译（可选） ----------------
 _CACHE = {}
 
@@ -327,38 +395,98 @@ def youdao_senses(word: str):
         return None
 
 
-def online_translate(text, target='zh-CN'):
-    if text in _CACHE:
-        return _CACHE[text]
+def _valid_trans(t: str, direction: str) -> bool:
+    if not t:
+        return False
+    if direction == 'zh2en':
+        return bool(re.search(r'[A-Za-z]{2,}', t)) and not _CJK_RE.search(t)
+    return bool(_CJK_RE.search(t))
+
+
+def _youdao_raw(q: str, direction: str) -> str:
+    """有道整句翻译；多行用 \\n 分隔，服务端会逐行返回。"""
+    body = urllib.parse.urlencode({
+        'q': q,
+        'from': 'zh-CHS' if direction == 'zh2en' else 'en',
+        'to': 'en' if direction == 'zh2en' else 'zh-CHS',
+    }).encode('utf-8')
+    req = urllib.request.Request(
+        'https://aidemo.youdao.com/trans', data=body,
+        headers={
+            'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                           'AppleWebKit/537.36 Chrome/120 Safari/537.36'),
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Referer': 'https://fanyi.youdao.com/',
+        })
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.loads(r.read().decode('utf-8'))
+    code = str(data.get('errorCode', '0'))
+    if code != '0':
+        raise RuntimeError('youdao errorCode ' + code)
+    tr = data.get('translation') or []
+    return ''.join(tr) if isinstance(tr, list) else str(tr)
+
+
+def youdao_batch(texts, direction):
+    """多行合并成一次请求；行数对不上就返回 None（交给逐条兜底）。"""
+    if not texts:
+        return []
+    out = _youdao_raw('\n'.join(texts), direction)
+    lines = out.split('\n')
+    return lines if len(lines) == len(texts) else None
+
+
+def online_translate(text, direction=None):
     text = (text or '').strip()
     if not text:
         return ''
-    # 1) MyMemory（响应快、无需注册）
+    direction = direction or detect_dir(text)
+    key = (direction, text)
+    if key in _CACHE:
+        return _CACHE[key]
+
+    # 1) 有道整句翻译（国内直连、无需密钥）
     try:
+        t = _youdao_raw(text, direction).strip()
+        if _valid_trans(t, direction):
+            _CACHE[key] = t
+            return t
+    except Exception:
+        pass
+
+    # 2) MyMemory（免费，按 IP 有每日额度）
+    try:
+        pair = 'zh-CN|en' if direction == 'zh2en' else 'en|zh-CN'
         url = ('https://api.mymemory.translated.net/get?q=' +
-               urllib.parse.quote(text) + '&langpair=en|zh-CN')
-        with urllib.request.urlopen(url, timeout=6) as r:
+               urllib.parse.quote(text) + '&langpair=' + pair)
+        with urllib.request.urlopen(url, timeout=8) as r:
             data = json.loads(r.read().decode('utf-8'))
-            t = (data.get('responseData') or {}).get('translatedText')
-            if t and 'MYMEMORY WARNING' not in t and 'QUERY LENGTH LIMIT' not in t:
-                _CACHE[text] = t
+            t = ((data.get('responseData') or {}).get('translatedText') or '').strip()
+            if 'MYMEMORY WARNING' in t or 'QUERY LENGTH LIMIT' in t:
+                t = ''
+            if t and _valid_trans(t, direction):
+                _CACHE[key] = t
                 return t
     except Exception:
         pass
-    # 2) LibreTranslate 公共实例（备选）
+
+    # 3) LibreTranslate 公共实例（备选）
+    src = 'zh' if direction == 'zh2en' else 'en'
+    tgt = 'en' if direction == 'zh2en' else 'zh'
     for host in ('https://libretranslate.com', 'https://translate.terraprint.co'):
         try:
-            payload = json.dumps({'q': text, 'source': 'en', 'target': 'zh'}).encode('utf-8')
+            payload = json.dumps({'q': text, 'source': src, 'target': tgt}).encode('utf-8')
             req = urllib.request.Request(host + '/translate', data=payload,
                                          headers={'Content-Type': 'application/json'})
             with urllib.request.urlopen(req, timeout=5) as r:
                 data = json.loads(r.read().decode('utf-8'))
-                if data.get('translatedText'):
-                    _CACHE[text] = data['translatedText']
-                    return data['translatedText']
+                t = (data.get('translatedText') or '').strip()
+                if t and _valid_trans(t, direction):
+                    _CACHE[key] = t
+                    return t
         except Exception:
             continue
-    _CACHE[text] = ''
+    _CACHE[key] = ''
     return ''
 
 
@@ -465,37 +593,79 @@ class Handler(BaseHTTPRequestHandler):
         if not data:
             return self._json({'ok': False, 'error': '空文件'})
         text = extract_document(data, ext)
-        sents = split_sentences(text)
-        if len(sents) > 400:
-            sents = sents[:400]
+        pairs = split_document(text)
+        if len(pairs) > 400:
+            pairs = pairs[:400]
         entries = []
-        for s in sents:
-            zh = online_translate(s) if want_tr else ''
-            entries.append({'en': s, 'zh': zh})
+        for s, d in pairs:
+            tr = online_translate(s, d) if want_tr else ''
+            if d == 'zh2en':
+                entries.append({'en': tr, 'zh': s, 'dir': d})
+            else:
+                entries.append({'en': s, 'zh': tr, 'dir': d})
         return self._json({'ok': True, 'entries': entries,
                            'chars': len(text), 'sentences': len(entries),
-                           'translated': sum(1 for e in entries if e['zh'])})
+                           'translated': sum(1 for e in entries
+                                             if (e['en'] if e['dir'] == 'zh2en' else e['zh']))})
 
     def _handle_translate(self):
         body = json.loads(self._read_body().decode('utf-8'))
         text = body.get('text', '')
-        sents = split_sentences(text) if '\n' in text else [text]
-        entries = [{'en': s, 'zh': online_translate(s)} for s in sents if s.strip()]
+        pairs = split_document(text) if '\n' in text else [(text.strip(), detect_dir(text))]
+        entries = []
+        for s, d in pairs:
+            if not s.strip():
+                continue
+            tr = online_translate(s, d)
+            if d == 'zh2en':
+                entries.append({'en': tr, 'zh': s, 'dir': d})
+            else:
+                entries.append({'en': s, 'zh': tr, 'dir': d})
         return self._json({'ok': True, 'entries': entries})
 
     def _handle_translate_lines(self):
-        """批量翻译若干行；带总时限，超时就返回空串（前端保留英文）。"""
+        """批量翻译若干行：按方向分组、多行合并成一次请求，减少调用次数。"""
         body = json.loads(self._read_body().decode('utf-8'))
-        lines = body.get('lines') or []
-        lines = [str(x) for x in lines][:60]
-        deadline = time.time() + 40
-        zh = []
-        for s in lines:
-            if time.time() > deadline:
-                zh.append('')
+        lines = [str(x) for x in (body.get('lines') or [])][:60]
+        dirs = body.get('dirs') or []
+        out = [''] * len(lines)
+        deadline = time.time() + 60
+
+        i = 0
+        while i < len(lines):
+            s = lines[i]
+            d = dirs[i] if i < len(dirs) else detect_dir(s)
+            if not s.strip() or time.time() > deadline:
+                i += 1
                 continue
-            zh.append(online_translate(s) if s.strip() else '')
-        return self._json({'ok': True, 'zh': zh})
+
+            # 收集同方向、总长不超 800 的连续行（一次请求翻一批）
+            grp = [i]
+            total = len(s)
+            j = i + 1
+            while j < len(lines) and len(grp) < 10:
+                sd = dirs[j] if j < len(dirs) else detect_dir(lines[j])
+                if sd != d or not lines[j].strip():
+                    break
+                if total + len(lines[j]) + 1 > 800:
+                    break
+                grp.append(j)
+                total += len(lines[j]) + 1
+                j += 1
+
+            texts = [lines[k] for k in grp]
+            got = None
+            try:
+                got = youdao_batch(texts, d)
+            except Exception:
+                got = None
+            if got is None:
+                got = [online_translate(t, d) for t in texts]
+            for k, t in zip(grp, got):
+                out[k] = t or ''
+            i = j
+
+        return self._json({'ok': True, 'zh': out, 'trans': out})
 
     def _send_html(self, html):
         data = html.encode('utf-8')

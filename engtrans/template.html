@@ -33,6 +33,15 @@ main{padding:22px 28px;display:flex;gap:20px;align-items:flex-start}
 .entry:last-child{border-bottom:none}
 .en{font-size:17px;line-height:1.7;color:var(--en);font-weight:500}
 .zh{font-size:16px;line-height:1.7;color:var(--zh);margin-top:8px;background:var(--hl);padding:8px 12px;border-radius:8px}
+/* 中→英：第一行中文原文（无底色），第二行英文译文（黄底，单词仍可点） */
+.src-zh{font-size:17px;line-height:1.7;color:var(--en);font-weight:500}
+.tr{font-size:16px;line-height:1.7;color:var(--zh);margin-top:8px;background:var(--hl);padding:8px 12px;border-radius:8px}
+.tr.pending{color:#b45309;opacity:.75;font-style:italic}
+/* 词典内查词：输入英文或中文 */
+.dict-search{display:flex;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:#fff}
+.dict-search input{flex:1 1 auto;min-width:0;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fafbfe;color:var(--ink)}
+.dict-search input:focus{outline:none;border-color:#93c5fd;background:#fff}
+.dict-search button{flex:0 0 auto;font-size:13px;padding:8px 14px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
 .word{color:#1d4ed8;cursor:pointer;border-radius:3px;transition:background .1s;padding:0 1px}
 .word:hover{background:#dbeafe}
 .word.active{background:#fde68a}
@@ -87,9 +96,10 @@ a.linkbtn:hover,button.linkbtn:hover{background:#e0e7ff}
   <div class="logo">🈶</div>
   <div>
     <h1>英语翻译助手</h1>
-    <p>逐行对照 · 点击取词（牛津风格）· 本地离线可用</p>
+    <p>中英双向互译 · 逐行对照 · 点击取词 · 本地离线可用</p>
   </div>
   <div class="header-right">
+    <button class="btn" id="openDictBtn" title="输入英文或中文查词">🔍 查词</button>
     <button class="btn" onclick="window.print()">🖨 打印</button>
   </div>
 </header>
@@ -104,8 +114,8 @@ a.linkbtn:hover,button.linkbtn:hover{background:#e0e7ff}
   <div class="left">
     <div class="card">
       <div class="toolbar">
-        <label>导入英文文档</label>
-        <input type="file" id="fileInput" accept=".txt,.md,.html,.pdf,.docx,.doc,application/pdf">
+        <label>导入文档</label>
+        <input type="file" id="fileInput" accept=".txt,.md,.html,.pdf,.docx,.doc,application/pdf" title="支持中文或英文文档，自动识别方向">
         <button class="primary" onclick="loadBundled()">📄 载入内置文档</button>
         <div class="spacer"></div>
         <label><input type="checkbox" id="autoTr" style="vertical-align:middle"> 导入时联网自动翻译</label>
@@ -125,6 +135,11 @@ a.linkbtn:hover,button.linkbtn:hover{background:#e0e7ff}
   <aside class="right">
     <div class="card dict-panel">
       <h3>📖 词典 · 点击下方英文单词查看释义</h3>
+      <div class="dict-search">
+        <input type="search" id="dictSearch" enterkeyhint="search" autocomplete="off"
+               placeholder="输入英文或中文，如 extinction / 灭绝">
+        <button id="dictSearchBtn" title="查词">查</button>
+      </div>
       <div class="dict-body" id="dictBody">
         <div class="dict-empty">点击左侧任意英文单词，这里会显示它在牛津词典中的释义。</div>
       </div>
@@ -257,6 +272,176 @@ function renderDict(entry, word){
   dictBody.innerHTML = html;
 }
 
+// ---------- 词典内查词：英→中 / 中→英（均支持一词多义） ----------
+let _zhIndex = null;      // 中文释义 → 英文单词（首次查询时构建）
+
+function stripZhNote(s){
+  return String(s||'')
+    .replace(/（[^）]*）/g,'').replace(/\([^)]*\)/g,'')
+    .replace(/\[[^\]]*\]/g,'');
+}
+
+function zhTerms(s){
+  return stripZhNote(s)
+    .split(/[；;，,、\/|]+/)
+    .map(x=>x.replace(/^(的|地|得|使|把|被)/,'').trim())
+    .filter(x=>x && x.length<=10);
+}
+
+function buildZhIndex(){
+  if(_zhIndex) return _zhIndex;
+  const idx = new Map();
+  const push = (term, w)=>{
+    let arr = idx.get(term);
+    if(!arr){ arr = []; idx.set(term, arr); }
+    if(arr.indexOf(w) < 0) arr.push(w);
+  };
+  const dict = DATA.dictionary || {};
+  Object.keys(dict).forEach(w=>{
+    (dict[w].meanings||[]).forEach(m=>{ zhTerms(m.zh).forEach(t=>push(t, w)); });
+  });
+  const fw = DATA.funcWords || {};
+  Object.keys(fw).forEach(w=>{ zhTerms(fw[w]).forEach(t=>push(t, w)); });
+  _zhIndex = idx;
+  return idx;
+}
+
+function searchZh(q){
+  const key = String(q||'').trim();
+  if(!key) return [];
+  if(key.length > 12) return [];
+  const idx = buildZhIndex();
+
+  const exact = idx.get(key);
+  if(exact && exact.length) return exact.slice(0, 30);
+
+  const allowReverse = key.length <= 4;
+  const loose = [];
+  for(const pair of idx){
+    const term = pair[0];
+    let hit = term.indexOf(key) >= 0;
+    if(!hit && allowReverse && term.length >= 2) hit = key.indexOf(term) >= 0;
+    if(hit){
+      pair[1].forEach(w=>{ if(loose.indexOf(w) < 0) loose.push(w); });
+      if(loose.length >= 40) break;
+    }
+  }
+  return loose;
+}
+
+function renderSearchList(q, words){
+  let html = '<div class="dict-card hit"><div class="dword">🔍 '+esc(q)+'</div>'+
+             '<div class="dnotes">在本地词库找到 '+words.length+' 个相关词条</div></div>';
+  words.slice(0, 12).forEach(w=>{
+    const e = (DATA.dictionary || {})[w];
+    html += '<div class="dict-card">';
+    if(e){
+      html += '<div class="dword">'+esc(e.headword || w)+' <span class="dipa">'+esc(e.ipa||'')+'</span></div>';
+      (e.meanings||[]).forEach(m=>{
+        html += '<div class="dmean">' + (m.pos?'<span class="dpos2">'+esc(m.pos)+'</span>':'') + esc(m.zh) + '</div>';
+      });
+      if(e.example) html += '<div class="dex">✎ '+esc(e.example)+'</div>';
+    }else{
+      html += '<div class="dword">'+esc(w)+'</div>' +
+              '<div class="dmean">'+esc((DATA.funcWords||{})[w] || '')+'</div>';
+    }
+    html += '</div>';
+  });
+  dictBody.innerHTML = html;
+}
+
+function renderOnlineSenses(word, d){
+  let h = '<div class="dict-card hit">' +
+          '<div class="dword">'+esc(word)+' <span class="dipa">'+esc(d.ipa||'')+'</span></div>' +
+          '<div class="dnotes">联网查询（按词性分组，一词多义）</div>';
+  (d.senses||[]).forEach(s=>{
+    h += '<div class="dmean">' + (s.pos?'<span class="dpos2">'+esc(s.pos)+'</span> ':'') + esc(s.zh) + '</div>';
+  });
+  h += '</div>';
+  dictBody.innerHTML = h;
+}
+
+let _searchSeq = 0;
+async function dictSearch(raw){
+  const q = String(raw || '').trim();
+  if(!q) return;
+  const seq = ++_searchSeq;
+  const isCJK = /[\u3400-\u9fff\uf900-\ufaff]/.test(q);
+
+  if(!isCJK){
+    const res = lookup(q);
+    if(res && res.entry){ renderDict(res.entry, q); return; }
+
+    dictBody.innerHTML = '<div class="dict-card"><div class="dword">'+esc(q)+'</div>'+
+      '<div class="dmiss">本地词库未收录，正在联网查询…</div></div>';
+    try{
+      const r = await fetchWithTimeout(SERVER_BASE + '/api/word?w=' + encodeURIComponent(q), {}, 20000);
+      const dd = await r.json();
+      if(seq === _searchSeq && dd && dd.ok && dd.senses && dd.senses.length){
+        renderOnlineSenses(q, {ipa: dd.ipa, senses: dd.senses});
+        return;
+      }
+    }catch(e){}
+    if(seq === _searchSeq) renderDict(null, q);
+    return;
+  }
+
+  const words = searchZh(q);
+  if(words.length){ renderSearchList(q, words); return; }
+
+  dictBody.innerHTML = '<div class="dict-card"><div class="dword">'+esc(q)+'</div>'+
+    '<div class="dmiss">本地词库没有「'+esc(q)+'」，正在联网翻译成英文…</div></div>';
+  try{
+    const r = await fetchWithTimeout(SERVER_BASE + '/api/translate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({text: q})
+    }, 30000);
+    const data = await r.json();
+    const first = (data && data.ok && data.entries && data.entries[0]) || null;
+    const en = first ? String(first.en || '').trim() : '';
+    if(seq === _searchSeq && en){
+      const clean = en.replace(/[.。,，;；!！?？]+$/,'').trim();
+      const word = clean.split(/\s+/).filter(Boolean)[0] || '';
+      const res = word ? lookup(word) : null;
+      let html = '<div class="dict-card hit"><div class="dword">'+esc(q)+'</div>'+
+                 '<div class="dmean">→ '+esc(clean)+'</div>'+
+                 '<div class="dnotes">联网翻译结果</div></div>';
+      if(res && res.entry){
+        html += '<div class="dict-card">'+
+                '<div class="dword">'+esc(res.entry.headword)+' <span class="dipa">'+esc(res.entry.ipa||'')+'</span></div>';
+        (res.entry.meanings||[]).forEach(m=>{
+          html += '<div class="dmean">' + (m.pos?'<span class="dpos2">'+esc(m.pos)+'</span>':'') + esc(m.zh) + '</div>';
+        });
+        html += '</div>';
+      }
+      dictBody.innerHTML = html;
+      return;
+    }
+  }catch(e){}
+  if(seq === _searchSeq){
+    dictBody.innerHTML = '<div class="dict-card hit"><div class="dword">'+esc(q)+'</div>'+
+      '<div class="dmiss">没有查到「'+esc(q)+'」。中文查英文需要本地服务在运行。</div></div>';
+  }
+}
+
+// 搜索框与「查词」按钮
+(function(){
+  const input   = document.getElementById('dictSearch');
+  const btn     = document.getElementById('dictSearchBtn');
+  const openBtn = document.getElementById('openDictBtn');
+  if(input){
+    input.addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ e.preventDefault(); dictSearch(input.value); }
+    });
+  }
+  if(btn) btn.addEventListener('click', function(){ dictSearch(input ? input.value : ''); });
+  if(openBtn){
+    openBtn.addEventListener('click', function(){
+      if(input){ try{ input.focus(); input.select(); }catch(e){} }
+    });
+  }
+})();
+
 // 点击/悬停取词入口：拆分 lookup() 的返回值，把 entry 交给 renderDict
 function showWord(word){
   const res = lookup(word);
@@ -305,40 +490,54 @@ function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ---------- rendering bilingual ----------
+// ---------- 渲染双语（支持 英→中 / 中→英） ----------
 let currentWords = [];
+let currentEntries = [];
 
-function renderBilingual(entries){
-  currentWords = [];
-  let html = '<div class="legend"><span><b>说明</b></span><span>■ 蓝色英文 = 可点击取词</span>'+
-    '<span>🟨 黄色 = 中文译文</span></div>';
-  entries.forEach((seg, idx)=>{
-    // tokenize english into words with markup
-    const enHtml = tokenize(seg.en, 'en');
-    html += '<div class="entry" data-i="'+idx+'">';
-    html += '<div class="en">'+enHtml+'</div>';
-    html += '<div class="zh'+(seg.zh ? '' : ' pending')+'" data-i="'+idx+'">'+(seg.zh ? esc(seg.zh) : '（待翻译）')+'</div>';
-    html += '</div>';
-  });
-  content.innerHTML = html;
-  const all = content.querySelectorAll('.word');
-  all.forEach(w=>{
+// 给 root 内所有英文单词绑定取词事件（可重复调用，不会重复绑定）
+function bindWordClicks(root){
+  root.querySelectorAll('.word').forEach(w=>{
+    if(w.dataset.bound === '1') return;
+    w.dataset.bound = '1';
     currentWords.push({el:w, word:w.textContent});
     w.addEventListener('click', function(e){
       e.stopPropagation();
       showWord(this.textContent);
-      // highlight
-      all.forEach(x=>x.classList.remove('active'));
+      root.querySelectorAll('.word').forEach(x=>x.classList.remove('active'));
       this.classList.add('active');
     });
     w.addEventListener('mouseenter', function(){
-      if(mode==='hover'){ 
-        all.forEach(x=>x.classList.remove('active'));
+      if(mode === 'hover'){
+        root.querySelectorAll('.word').forEach(x=>x.classList.remove('active'));
         this.classList.add('active');
         showWord(this.textContent);
       }
     });
   });
+}
+
+function renderBilingual(entries){
+  currentWords = [];
+  currentEntries = entries || [];
+  let html = '<div class="legend"><span><b>说明</b></span>'+
+    '<span>第一行 = 原文</span><span>🟨 黄色 = 译文</span>'+
+    '<span>■ 蓝色英文单词 = 可点击取词</span></div>';
+  currentEntries.forEach((seg, idx)=>{
+    const d = seg.dir || 'en2zh';
+    html += '<div class="entry" data-i="'+idx+'">';
+    if(d === 'zh2en'){
+      html += '<div class="src-zh">'+esc(seg.zh || '')+'</div>';
+      html += '<div class="tr'+(seg.en ? '' : ' pending')+'" data-tr="'+idx+'">'+
+              (seg.en ? tokenize(seg.en) : '（待翻译）')+'</div>';
+    } else {
+      html += '<div class="en">'+tokenize(seg.en || '')+'</div>';
+      html += '<div class="tr'+(seg.zh ? '' : ' pending')+'" data-tr="'+idx+'">'+
+              (seg.zh ? esc(seg.zh) : '（待翻译）')+'</div>';
+    }
+    html += '</div>';
+  });
+  content.innerHTML = html;
+  bindWordClicks(content);
 }
 
 let mode = 'click';
@@ -373,23 +572,69 @@ function stripMarkdown(t){
   return t;
 }
 
+// ---------- 中英方向识别与按行切分 ----------
+function detectDir(s){
+  const t = String(s || '');
+  const cjk = (t.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+  const lat = (t.match(/[A-Za-z]/g) || []).length;
+  if(cjk === 0) return 'en2zh';
+  if(lat === 0) return 'zh2en';
+  return (cjk * 2 >= lat) ? 'zh2en' : 'en2zh';
+}
+
+function isNoiseLine(ln){
+  const t = String(ln || '').trim();
+  if(!t) return true;
+  if(/^change\s+times/i.test(t) || /粉丝团/.test(t)) return true;
+  if(/^[\d\s.\-–—|/]+$/.test(t)) return true;
+  if(/^第\s*[0-9０-９一二三四五六七八九十百千]+\s*页\s*$/.test(t)) return true;
+  if(/^page\s*\d+(\s*(of|\/)\s*\d+)?$/i.test(t)) return true;
+  if(/^\d+\s*\/\s*\d+$/.test(t)) return true;
+  return false;
+}
+
+// 纯文本按行切分（中文行按句号再切）
+function entriesFromLines(text){
+  const out = [];
+  String(text || '').split(/\r?\n/).forEach(ln=>{
+    ln = ln.trim();
+    if(isNoiseLine(ln)) return;
+    const d = detectDir(ln);
+    if(d === 'zh2en'){
+      ln.split(/(?<=[。！？；])/).forEach(p=>{
+        p = p.trim();
+        if(p && /[\u4e00-\u9fff]/.test(p)) out.push({en:'', zh:p, dir:'zh2en'});
+      });
+    } else if(/[A-Za-z]{2,}/.test(ln)){
+      out.push({en:ln, zh:'', dir:'en2zh'});
+    }
+  });
+  return out;
+}
+
+function dirSummary(entries){
+  let z = 0, e = 0;
+  entries.forEach(x=>{ if((x.dir || 'en2zh') === 'zh2en') z++; else e++; });
+  if(z && e) return '中→英 ' + z + ' 行 / 英→中 ' + e + ' 行';
+  return z ? '中文 → 英文' : '英文 → 中文';
+}
+
 async function loadTextFile(text, fileName){
-  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l && !/^Change Times/.test(l) && !/粉丝团/.test(l));
-  if(!lines.length){ showBanner('warn', '文件里没有可识别的英文内容。'); return; }
-  const entries = lines.map(l=>({en:l, zh:''}));
-  renderBilingual(entries);   // 先秒出
+  const entries = entriesFromLines(text);
+  if(!entries.length){ showBanner('warn', '文件里没有可识别的中文或英文内容。'); return; }
+  renderBilingual(entries);   // 先秒出原文
 
   const wantAuto = document.getElementById('autoTr') && document.getElementById('autoTr').checked;
   if(wantAuto){
     const ok = await checkBackend();
     if(!ok){ offlineBanner(); return; }
-    showBanner('info', '已导入 '+entries.length+' 行，正在后台翻译…');
+    showBanner('info', '已导入 '+entries.length+' 行（'+dirSummary(entries)+'），正在后台翻译…');
     const done = await translateEntries(entries);
     showBanner(done>0?'ok':'warn',
       done>0 ? '已导入并翻译「'+esc(fileName)+'」：'+done+' / '+entries.length+' 行。'
-             : '已导入「'+esc(fileName)+'」：'+entries.length+' 行（联网翻译失败，仅英文）。');
+             : '已导入「'+esc(fileName)+'」：'+entries.length+' 行（联网翻译失败，仅显示原文）。');
   } else {
-    showBanner('ok', '已导入「'+esc(fileName)+'」：'+entries.length+' 行（仅英文）。勾选「导入时联网自动翻译」可翻译。');
+    showBanner('ok', '已导入「'+esc(fileName)+'」：'+entries.length+' 行（'+dirSummary(entries)+'）。勾选「导入时联网自动翻译」可生成译文。');
   }
 }
 
@@ -483,39 +728,56 @@ async function extractViaServer(file){
   return data;
 }
 
-// 逐批翻译，边翻边更新页面
+// ---------- 逐批翻译（服务端按方向分组、多行合并） ----------
+function srcOf(e){ return (e.dir === 'zh2en') ? (e.zh || '') : (e.en || ''); }
+function setTrans(e, t){ if(e.dir === 'zh2en') e.en = t; else e.zh = t; }
+function hasTrans(e){ return e.dir === 'zh2en' ? !!e.en : !!e.zh; }
+
 async function translateEntries(entries){
-  const BATCH = 6;
+  const BATCH = 10;
   let done = 0;
   for(let i=0;i<entries.length;i+=BATCH){
     const chunk = entries.slice(i, i+BATCH);
     try{
       const resp = await fetchWithTimeout(SERVER_BASE + '/api/translate-lines', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({lines: chunk.map(e=>e.en)})
-      }, 40000);
+        body: JSON.stringify({
+          lines: chunk.map(e=> srcOf(e)),
+          dirs:  chunk.map(e=> e.dir || 'en2zh')
+        })
+      }, 60000);
       const data = await resp.json();
-      if(data && data.ok && Array.isArray(data.zh)){
-        data.zh.forEach((z,k)=>{
-          if(z){
-            entries[i+k].zh = z;
-            updateZh(i+k, z);
-            done++;
-          }
+      const arr = (data && (data.trans || data.zh)) || [];
+      if(Array.isArray(arr)){
+        arr.forEach((t,k)=>{
+          if(t){ setTrans(entries[i+k], t); updateTr(i+k, t); done++; }
         });
       }
     }catch(err){
-      // 网络不可用就停止，保留英文
+      // 网络不可用就停止，保留原文
       break;
     }
+    showBanner('info', '正在翻译… 已完成 <b>'+done+' / '+entries.length+'</b> 句');
   }
   return done;
 }
 
-function updateZh(idx, text){
-  const el = content.querySelector('.zh[data-i="'+idx+'"]');
-  if(el){ el.textContent = text; el.classList.remove('pending'); }
+// 更新第 idx 条的译文（自动适配方向）
+function updateTr(idx, text){
+  const el = content.querySelector('[data-tr="'+idx+'"]');
+  if(!el) return;
+  el.classList.remove('pending');
+  const e = currentEntries[idx];
+  if(e && (e.dir || 'en2zh') === 'zh2en'){
+    el.innerHTML = tokenize(text);
+    bindWordClicks(el);
+  } else {
+    el.textContent = text;
+  }
 }
+
+// 兼容旧名字
+function updateZh(idx, text){ updateTr(idx, text); }
 
 document.getElementById('fileInput').addEventListener('change', async function(e){
   const file = e.target.files[0];
@@ -548,22 +810,24 @@ document.getElementById('fileInput').addEventListener('change', async function(e
   try{
     const data = await extractViaServer(file);
     if(!data.entries || !data.entries.length){
-      showBanner('warn', '未能从「<b>'+esc(file.name)+'</b>」中提取到英文文本。<br>可能是扫描版/图片型 PDF（没有文字层），需要先 OCR 转成文字。');
+      showBanner('warn', '未能从「<b>'+esc(file.name)+'</b>」中提取到中文或英文文本。<br>可能是扫描版/图片型 PDF（没有文字层），需要先 OCR 转成文字。');
       return;
     }
-    const entries = data.entries.map(x=>({en:x.en, zh:''}));
-    renderBilingual(entries);   // 先秒出英文
-    status.textContent = '已解析「'+file.name+'」：共 '+data.sentences+' 句。';
+    const entries = data.entries.map(x=>({
+      en: x.en || '', zh: x.zh || '', dir: x.dir || 'en2zh'
+    }));
+    renderBilingual(entries);   // 先秒出原文
+    status.textContent = '已解析「'+file.name+'」：共 '+data.sentences+' 句（'+dirSummary(entries)+'）。';
     if(wantTr){
-      showBanner('info', '已导入 '+data.sentences+' 句英文，正在后台逐句翻译…（可先阅读英文，译文会自动填入）');
+      showBanner('info', '已导入 '+data.sentences+' 句（'+dirSummary(entries)+'），正在后台逐句翻译…（可先阅读原文，译文会自动填入）');
       const done = await translateEntries(entries);
       if(done > 0){
         showBanner('ok', '已完成：「<b>'+esc(file.name)+'</b>」共 '+data.sentences+' 句，已翻译 '+done+' 句。点击任意英文单词可取词。');
       } else {
-        showBanner('warn', '英文已导入（'+data.sentences+' 句），但联网翻译失败（可能无网络）。英文内容与点击取词不受影响。');
+        showBanner('warn', '原文已导入（'+data.sentences+' 句），但联网翻译失败（可能无网络）。原文与点击取词不受影响。');
       }
     } else {
-      showBanner('ok', '已导入「<b>'+esc(file.name)+'</b>」共 '+data.sentences+' 句。<br>勾选「导入时联网自动翻译」后重新导入即可获得中文译文。');
+      showBanner('ok', '已导入「<b>'+esc(file.name)+'</b>」共 '+data.sentences+' 句（'+dirSummary(entries)+'）。<br>勾选「导入时联网自动翻译」后重新导入即可获得译文。');
     }
   }catch(err){
     showBanner('err', '解析失败：'+esc(err.message)+'<br>请确认本地服务仍在运行（<code>http://127.0.0.1:8338</code>）。',
