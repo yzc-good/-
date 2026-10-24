@@ -1,76 +1,81 @@
-术语在线接入 · 调查记录（2026-10-24）
-========================================
+术语在线接入 · 调查与实现记录（2026-10-24）
+============================================
 
-一、结论概览
-------------
-术语在线的「权威术语数据」具备官方接入通道，可直接拿到规范的
-cn(中文名)/en(英文名)/subjectName(学科)/source(来源文献) 明文。
-当前工具已完成「联网跳转术语在线查」入口（web v10），下一步
-（可选）可通过官方 API 把术语库接入本地翻译/查词。
-
-二、官方数据/接口通道（方案 A 依据）
-------------------------------------
-来源：术语在线官网「平台数据开放」栏目发布的官方 PDF
-《术语在线服务接口使用规范》5 页（166KB）。
-
-核心接口：
-  GET https://api.termonline.cn/main-serve/business/tm/tmWord/appSearch
-
-请求参数（form-data/header）：
-  term        String  必填  查询关键词
-  match       String  必填  1=精确 2=模糊
-  pubYears    Array   必填  可传空
-  appid       String  必填  查询凭证
-  secret      String  必填  查询凭证
-  pageNo      Integer 默认1 页码
-  pageSize    Integer 默认10 每页量
-
-返回（JSON）：
-  result.totalRecords   结果数
-  result.tmWordList[]:
-    id / cn(中文名) / en(英文名, JSON数组字符串)
-    subjectName(学科) / subjectFullName / publishYear(发布年)
-    definition(定义) / source(来源,如《海峡两岸大气科学名词》)
-    alsoName(又称) / commName(全称) / collect / tmVideo
-  result.overView: en[] / cn[] / tw[](台湾名) / source[]
-
-已实测：公开 web 站的同源 web 接口 allSearch 匿名访问返回空壳
-分页容器（totalRecords=0），确认正式查询须带凭证 appid+secret。
-开放接口域名 api.termonline.cn 走 appSearch。
-
-三、凭证申请门槛（合规关键）
-----------------------------
-PDF 说明：向术语在线平台/管理员申请第三方调用凭证，须提供：
-  · 申请单位名称
-  · 统一社会信用代码
-  · 用途说明
-  · 联系人 + 手机号
-  · 上传申请材料
-
-即：需要「单位资质」才能拿 appid/secret。
-- 若有单位主体 → 可正式申请，接入最正规（数据授权明确）。
-- 若纯个人自用 → 拿不到单位凭证；但「跳转到术语在线网页查」
-  不涉及自行抓取/再分发数据，完全合规，已经可用。
-
-四、当前已落地（不依赖凭证的部分）
-----------------------------------
-手机版 + 桌面版均已在词典面板加「🔬 术语在线」按钮：
-  · 点击用当前查词（或当前取词）自动填到术语在线搜索页
-  · 术语在线搜索 URL 已验证可达（HTTP 200）
-  · web 版本号已升至 10，含此功能
-
-五、后续可选：把术语库接入本地（需用户决定是否以单位申请）
---------------------------------------------------------
-若获得 appid/secret，可把官方返回的
-  cn <-> en + subjectName + 学科+来源
-叠加进现有词库（dict_multi.json），
-让专业术语翻译优先采用「全国科技术语委标准译名」。
-实现方式：类似 buildZhIndex 的术语索引，
-命中术语词时优先展示标准译名与来源。
-
-六、风险与合规提醒
+一、结论（已落地）
 ------------------
-· 术语在线的「数据」属全国科技术语委，接口有凭证访问控制。
-· 商业/分发用途必须走官方申请获取授权，勿匿名爬取其数据。
-· 当前「跳转网页」&「官方 API（若申请到）」两条路都合规；
-  切勿绕开凭证抓 web 接口。
+术语在线的权威术语数据已经真正接入本工具（web v10）：
+查词时自动查询术语在线，命中则展示
+  「中文名 = 英文名 · 学科 · 《来源名词》 · 发布年 · 术语编号 · 完整定义」
+并保留「跳到术语在线查完整词条」按钮。
+
+无需申请 appid/secret 即可用——因为找到了匿名公开的查询接口
+（详见第四节）。批量数据分发/商用仍建议走官方授权（第三节）。
+
+二、官方授权通道（如需批量/商用）
+----------------------------------
+来源：术语在线官网「平台数据开放」发布的官方 PDF
+《术语在线服务接口使用规范》（5 页）。
+
+  申请地址：https://www.termonline.cn/platFormDataOpenness
+  接口申请：https://www.termonline.cn/termInterface
+
+  凭证接口：GET https://api.termonline.cn/main-serve/business/tm/tmWord/appSearch
+  参数：term / match(1精确 2模糊) / pubYears / appid / secret / pageNo / pageSize
+  返回：tmWordList[]（cn/en/subjectName/source/definition/alsoName...）
+
+  申请需提供：单位名称、统一社会信用代码、用途、联系人、手机号、申请材料。
+  → 适合有单位主体、需批量导入或对外分发数据的场景。
+
+三、合规边界
+------------
+· 「按需实时查一个词」= 正常用户行为，与人在网页上查等价，合规风险低。
+  本工具即采用这种方式：用户查哪个词，才向术语在线请求哪一个。
+· 「批量下载/整库抓取后随包分发」属于再分发，
+  必须走第二节的官方申请获得授权，不可匿名批量抓。
+· 本工具没有内置任何术语在线数据副本，全部实时联网查询，
+  断网时自动退回本地词库与通用词典。
+
+四、实际使用的接口（匿名公开、CORS 开放）
+------------------------------------------
+  GET https://www.termonline.cn/main-serve/business/tm/tmWord/drawWordSearch?term=<词>
+
+  实测：中英文均可查，返回 success/code/result，result 含
+    cn（中文名）/ en（英文名）/ definition（定义）
+    subjectName / subjectFullName（学科）
+    source（来源名词，如「农学名词」）/ publishYear（发布年）
+    wordNumber（术语编号，如 06.005）/ bbh（版本）
+    alsoName（又称，JSON 数组字符串）/ quote1·quote2（审定出处）
+
+  CORS：Access-Control-Allow-Origin 回显请求方 Origin，
+        OPTIONS 预检通过 → 浏览器可直接跨域调用，无需代理。
+
+  实测样例：
+    ecosystem    → 生态系统 = ecosystem，《地质学名词》2026，18.03.010
+    biodiversity → 生物多样性 = biodiversity，《农学名词》2025，06.005
+    extinction   → 消光 = extinction（矿物学专业义，区别于通用义「灭绝」）
+    mitochondrion→ 线粒体 = mitochondrion
+
+  说明：术语库是「科技术语」库，专业词返回专业义。
+  通用词（如 extinction）可能给出专业领域义项，
+  因此本工具把它作为「权威术语参考卡」附加展示，
+  不覆盖本地通用词典释义，避免误导。
+
+五、实现位置（源码）
+--------------------
+· mobile/template.mobile.html
+    fetchTermOnline()  —— 调用 drawWordSearch，9s 超时
+    termCardHtml()     —— 渲染权威术语卡片
+    bindTermMore()     —— 绑定「查看完整词条」跳转
+    dictSearch()       —— 英文/中文两个分支均已接入
+· template.html 同结构（对应桌面版）
+
+  展示策略：
+    1) 本地词库命中 → 正常显示释义，术语命中则追加权威卡片
+    2) 本地未命中 → 术语在线优先，再退到通用联网词典/翻译
+    3) 术语也未收录 → 退回原有联网翻译流程
+
+六、后续可选增强
+----------------
+· 缓存已查术语（localStorage），减少重复请求
+· 术语命中时在正文取词里标注「标准译名」
+· 若申请到 appid/secret，可改用官方 appSearch 做批量校验与更全检索

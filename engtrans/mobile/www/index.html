@@ -60,6 +60,11 @@ main{padding:22px 28px;display:flex;gap:20px;align-items:flex-start}
 .term-line button:active{opacity:.85}
 .term-line .term-note{font-size:11px;color:#6b7280;line-height:1.4;min-width:0}
 @media (max-width:520px){ .term-line{flex-direction:column;align-items:flex-start;gap:4px} }
+/* 术语在线权威卡片 */
+.termcard{border-left:3px solid #15803d;background:#f7fdf9}
+.termcard .dword{color:#14532d}
+.termbadge{display:inline-block;font-size:10.5px;color:#15803d;background:#dcfce7;
+  border-radius:20px;padding:2px 9px;margin:6px 0 2px}
 .dict-body{padding:0;max-height:70vh;overflow:auto}
 .dict-empty{padding:28px 18px;color:var(--muted);font-size:13px;text-align:center}
 .dict-card{padding:16px;border-bottom:1px solid var(--line)}
@@ -459,6 +464,74 @@ function renderOnlineSenses(word, d){
   dictBody.innerHTML = h;
 }
 
+// ---------- 术语在线：权威科技术语（全国科技术语委） ----------
+// 使用术语在线公开的 drawWordSearch 接口（匿名可用、CORS 开放）。
+// 仅为「用户当前查的这一个词」实时查询，不做批量抓取。
+async function fetchTermOnline(term){
+  const q = String(term || '').trim();
+  if(!q) return null;
+  const url = 'https://www.termonline.cn/main-serve/business/tm/tmWord/drawWordSearch?term=' +
+              encodeURIComponent(q);
+  try{
+    const j = await httpJson(url, {
+      'Accept':'application/json, text/plain, */*'
+    }, 9000);
+    const r = (j && j.result) || null;
+    if(!r || (!r.cn && !r.en)) return null;
+    return r;
+  }catch(e){
+    return null;
+  }
+}
+
+// 渲染术语在线权威卡片（标准译名 + 学科 + 定义 + 来源）
+function termCardHtml(r){
+  const title = (r.cn || '') && (r.en || '') ? (r.cn + ' = ' + r.en)
+              : (r.cn || r.en || '');
+  const subj = r.subjectFullName || r.subjectName || '';
+  let h = '<div class="dict-card termcard">' +
+          '<div class="dword">🔬 ' + esc(title) + '</div>' +
+          '<div class="termbadge">全国科技术语委 · 术语在线' + (subj ? ' · ' + esc(subj) : '') + '</div>';
+  const meta = [];
+  if(r.subjectFullName || r.subjectName) meta.push('学科：' + esc(r.subjectFullName || r.subjectName));
+  if(r.source) meta.push('来源：《' + esc(r.source) + '》');
+  if(r.publishYear) meta.push('发布：' + esc(r.publishYear) + ' 年');
+  if(r.wordNumber) meta.push('编号：' + esc(r.wordNumber));
+  if(meta.length) h += '<div class="dnotes">' + meta.join(' · ') + '</div>';
+  if(r.definition){
+    h += '<div class="dmean" style="margin-top:8px">' + esc(r.definition) + '</div>';
+  }
+  const aliases = [];
+  try{
+    const also = JSON.parse(r.alsoName || '[]');
+    if(Array.isArray(also)) also.forEach(x=>{ if(x) aliases.push(x); });
+  }catch(e){}
+  if(aliases.length) h += '<div class="dsyn">又称：<b>' + esc(aliases.join('、')) + '</b></div>';
+  h += '<div style="margin-top:10px">' +
+       '<button class="linkbtn" id="termMoreBtn">🔬 在术语在线查看完整词条</button>' +
+       '</div></div>';
+  return h;
+}
+
+// 绑定术语卡片里的「查看完整词条」按钮
+function bindTermMore(r){
+  const btn = dictBody.querySelector('#termMoreBtn');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    const q = (r && (r.cn || r.en)) || currentLookupWord || '';
+    const url = 'https://www.termonline.cn/search?searchText=' + encodeURIComponent(q);
+    const isCap = (typeof window.Capacitor !== 'undefined' &&
+                   window.Capacitor && window.Capacitor.isNativePlatform);
+    try{
+      const w = window.open(url, isCap ? '_system' : '_blank', 'noopener');
+      if(w && w.focus) w.focus();
+      if(!w && !isCap){ location.href = url; }
+    }catch(e){
+      try{ window.open(url, '_blank', 'noopener'); }catch(e2){}
+    }
+  });
+}
+
 let _searchSeq = 0;
 async function dictSearch(raw){
   const q = String(raw || '').trim();
@@ -471,10 +544,36 @@ async function dictSearch(raw){
   // -------- 英文 / 拉丁字母输入 --------
   if(!isCJK){
     const res = lookup(q);
-    if(res && res.entry){ renderDict(res.entry, q); return; }
+    // 并发查术语在线（专业术语的权威译名）
+    const termP = fetchTermOnline(q);
+
+    if(res && res.entry){
+      renderDict(res.entry, q);
+      // 本地命中后再补一张权威术语卡（若命中）
+      termP.then(function(t){
+        if(seq !== _searchSeq || !t) return;
+        const extra = termCardHtml(t);
+        // 仅当术语译名与本地不同、或有定义时追加，避免重复噪声
+        const card = document.createElement('div');
+        card.innerHTML = extra;
+        const node = card.firstElementChild;
+        if(node) dictBody.appendChild(node);
+        bindTermMore(t);
+      });
+      return;
+    }
 
     dictBody.innerHTML = '<div class="dict-card"><div class="dword">'+esc(q)+'</div>'+
       '<div class="dmiss">本地词库未收录，正在联网查询…</div></div>';
+    // 术语在线优先（比通用词典更权威）
+    try{
+      const t = await termP;
+      if(seq === _searchSeq && t){
+        dictBody.innerHTML = termCardHtml(t);
+        bindTermMore(t);
+        return;
+      }
+    }catch(e){}
     try{
       const d = await fetchYoudao(q);
       if(seq === _searchSeq && d && d.senses && d.senses.length){ renderOnlineSenses(q, d); return; }
@@ -494,10 +593,35 @@ async function dictSearch(raw){
 
   // -------- 中文输入：先查本地反查索引 --------
   const words = searchZh(q);
-  if(words.length){ renderSearchList(q, words); return; }
+  const termPZh = fetchTermOnline(q);
+
+  if(words.length){
+    renderSearchList(q, words);
+    termPZh.then(function(t){
+      if(seq !== _searchSeq || !t) return;
+      const card = document.createElement('div');
+      card.innerHTML = termCardHtml(t);
+      const node = card.firstElementChild;
+      if(node) dictBody.appendChild(node);
+      bindTermMore(t);
+    });
+    return;
+  }
 
   dictBody.innerHTML = '<div class="dict-card"><div class="dword">'+esc(q)+'</div>'+
-    '<div class="dmiss">本地词库没有「'+esc(q)+'」，正在联网翻译成英文…</div></div>';
+    '<div class="dmiss">本地词库没有「'+esc(q)+'」，正在查询术语在线…</div></div>';
+  // 术语在线优先（权威科技术语）
+  try{
+    const t = await termPZh;
+    if(seq === _searchSeq && t){
+      dictBody.innerHTML = termCardHtml(t);
+      bindTermMore(t);
+      return;
+    }
+  }catch(e){}
+
+  dictBody.innerHTML = '<div class="dict-card"><div class="dword">'+esc(q)+'</div>'+
+    '<div class="dmiss">术语在线未收录，正在联网翻译成英文…</div></div>';
   try{
     const en = await translateOne(q, true);
     if(seq === _searchSeq && en){
