@@ -52,7 +52,13 @@ public class UpdateManager extends Plugin {
     private static final String DIR_UPDATES = "updates";
     private static final String DIR_WEB = "www";
 
-    /** 更新清单地址 + 该镜像对应的文件下载基准目录 + 是否只作兜底 */
+    /**
+     * 更新清单地址 + 该镜像对应的文件下载基准目录 + 是否只作兜底。
+     *
+     * 只使用「raw 的直通代理」：它们每次都回源，不会返回陈旧内容。
+     * 曾经用过 jsDelivr，但它对分支有最长 7 天的缓存且加时间戳也绕不过，
+     * 导致「检查说有新版、下载时却说清单里没有 apk」，已移除。
+     */
     private static final String[][] MIRRORS = {
             // { manifestUrl, filesBase, preferLast(1=只在前面的都失败时才用) }
             {"https://raw.githubusercontent.com/yzc-good/-/main/update/update.json",
@@ -61,14 +67,28 @@ public class UpdateManager extends Plugin {
              "https://ghfast.top/https://raw.githubusercontent.com/yzc-good/-/main/update/", "0"},
             {"https://ghproxy.net/https://raw.githubusercontent.com/yzc-good/-/main/update/update.json",
              "https://ghproxy.net/https://raw.githubusercontent.com/yzc-good/-/main/update/", "0"},
-            // jsDelivr 对分支有较长缓存，容易拿到旧清单，所以只作最后兜底
-            {"https://cdn.jsdelivr.net/gh/yzc-good/-@main/update/update.json",
-             "https://cdn.jsdelivr.net/gh/yzc-good/-@main/update/", "1"},
+            {"https://gh-proxy.com/https://raw.githubusercontent.com/yzc-good/-/main/update/update.json",
+             "https://gh-proxy.com/https://raw.githubusercontent.com/yzc-good/-/main/update/", "0"},
     };
 
     private static final int MANIFEST_TOTAL_TIMEOUT_MS = 25000;
     /** 兜底镜像已拿到后，最多再等其他地址这么久 */
     private static final int FALLBACK_GRACE_MS = 12000;
+
+    /**
+     * 「检查」拿到的清单缓存：用户点完检查再点下载时直接复用，
+     * 避免第二次请求命中别的镜像、出现「检查有包、下载没包」的不一致。
+     * 每次主动「检查更新」都会重新拉取，所以不会漏掉新版本。
+     */
+    private static final long MANIFEST_CACHE_TTL_MS = 10 * 60 * 1000L;
+    private Manifest cachedManifest;
+    private long cachedManifestAt = 0L;
+
+    private void remember(Manifest m) {
+        if (m == null) return;
+        cachedManifest = m;
+        cachedManifestAt = System.currentTimeMillis();
+    }
 
     // ---------------------------------------------------------------
     // 检查更新
@@ -79,7 +99,8 @@ public class UpdateManager extends Plugin {
             int webVersion = getLocalWebVersion();
             int appVersionCode = currentVersionCode();
 
-            Manifest m = fetchManifest(call.getString("manifestUrl", null));
+            // 主动检查一律重新拉取（不复用缓存），确保能发现刚发布的新版本
+            Manifest m = fetchManifest(call.getString("manifestUrl", null), false);
             JSONObject android = m.json.optJSONObject("android");
             if (android == null) {
                 call.resolve(reply("none", "清单中没有 android 更新信息",
@@ -122,7 +143,7 @@ public class UpdateManager extends Plugin {
     @PluginMethod
     public void applyWeb(PluginCall call) {
         try {
-            Manifest m = fetchManifest(call.getString("manifestUrl", null));
+            Manifest m = fetchManifest(call.getString("manifestUrl", null), true);
             JSONObject android = m.json.optJSONObject("android");
             if (android == null) {
                 call.reject("清单里没有 android 信息", "NO_MANIFEST");
@@ -203,10 +224,15 @@ public class UpdateManager extends Plugin {
     @PluginMethod
     public void installApp(PluginCall call) {
         try {
-            Manifest m = fetchManifest(call.getString("manifestUrl", null));
+            // 优先复用「检查」时的清单；若里面没有 apk，强制重新拉一次再判断
+            Manifest m = fetchManifest(call.getString("manifestUrl", null), true);
             JSONObject android = m.json.optJSONObject("android");
             if (android == null || !android.has("apk")) {
-                call.reject("清单里没有整包升级信息", "NO_APK");
+                m = fetchManifest(call.getString("manifestUrl", null), false);
+                android = m.json.optJSONObject("android");
+            }
+            if (android == null || !android.has("apk")) {
+                call.reject("清单里没有整包升级信息，请重新点「更新」再试", "NO_APK");
                 return;
             }
             JSONObject apk = android.getJSONObject("apk");
@@ -254,7 +280,7 @@ public class UpdateManager extends Plugin {
         String host;
     }
 
-    private Manifest fetchManifest(String overrideUrl) throws Exception {
+    private Manifest fetchManifest(String overrideUrl, boolean allowCache) throws Exception {
         // 调用方指定了地址就只用它
         if (overrideUrl != null && !overrideUrl.trim().isEmpty()) {
             overrideUrl = overrideUrl.trim();
@@ -265,15 +291,18 @@ public class UpdateManager extends Plugin {
             return m;
         }
 
+        // 复用「检查」时拿到的清单，保证后续动作与用户看到的完全一致
+        if (allowCache && cachedManifest != null
+                && System.currentTimeMillis() - cachedManifestAt < MANIFEST_CACHE_TTL_MS) {
+            return cachedManifest;
+        }
+
         ExecutorService pool = Executors.newFixedThreadPool(MIRRORS.length);
         final List<Future<Object[]>> futures = new ArrayList<>();
         try {
             for (final String[] mir : MIRRORS) {
                 futures.add(pool.submit(() -> {
-                    String url = mir[0];
-                    // jsDelivr 缓存很重，加时间戳尽量拿最新内容
-                    if ("1".equals(mir[2])) url = url + "?t=" + System.currentTimeMillis();
-                    JSONObject j = fetchJson(url, 20000);
+                    JSONObject j = fetchJson(mir[0], 20000);
                     return new Object[]{j, mir[1], hostOf(mir[0])};
                 }));
             }
@@ -301,6 +330,7 @@ public class UpdateManager extends Plugin {
                         if ("1".equals(MIRRORS[i][2])) {
                             if (fallback == null) fallback = m;
                         } else {
+                            remember(m);
                             return m;   // 优先镜像，立刻采用
                         }
                     } catch (ExecutionException ee) {
@@ -314,7 +344,7 @@ public class UpdateManager extends Plugin {
                 if (fallback != null && System.currentTimeMillis() - startAt >= FALLBACK_GRACE_MS) break;
                 Thread.sleep(120);
             }
-            if (fallback != null) return fallback;
+            if (fallback != null) { remember(fallback); return fallback; }
             if (errors.isEmpty()) errors.add("全部超时（" + (MANIFEST_TOTAL_TIMEOUT_MS / 1000) + " 秒）");
             throw new IOException("所有更新地址都无法访问 → " + String.join("；", errors));
         } finally {

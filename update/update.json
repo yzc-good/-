@@ -3,11 +3,11 @@
     "webVersion": 4,
     "type": "both",
     "apk": {
-      "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/EnglishTranslator-v1.4.apk",
-      "versionName": "1.4",
-      "versionCode": 5,
+      "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/EnglishTranslator-v1.5.apk",
+      "versionName": "1.5",
+      "versionCode": 6,
       "size": 4369885,
-      "sha256": "53c6bf5b31af80aeeb8b05d5b85675ba0b0e60a495ddf976fb6526b2a1500761"
+      "sha256": "b9672fa91543ca45c6d9c3dd182b22002d76bfcb213ad263dc198f8767a8ce64"
     },
     "files": [
       {
