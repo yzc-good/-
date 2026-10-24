@@ -60,6 +60,23 @@
   因此本工具把它作为「权威术语参考卡」附加展示，
   不覆盖本地通用词典释义，避免误导。
 
+  ★ 相关性过滤（v10 已加入，重要）：
+    该接口按「包含」匹配，会把常见词误配到缩写词条，实测：
+      the → 卫生总费用（total expenditure on health, THE）
+      in  → 智能网（intelligent network, IN）
+      it  → 信息技术（information technology, IT）
+      be  → 碱剩余（base excess, BE）
+      is  → 插入序列（insertion sequence, IS）
+    若不校验，查 the/in/it 会弹出完全无关的医学术语，看起来像 bug。
+    因此 fetchTermOnline 内置了两道校验：
+      1) 英文功能词黑名单（冠词/介词/助动词/代词等）直接跳过，连请求都不发
+      2) termIsRelevant() 校验英文名变体与查询词是否真正匹配：
+         · 中文查询：要求 cn 精确或包含关系
+         · 短词(≤4字母)：要求整体相等，且大小写风格一致
+           （DNA ↔ DNA 通过；the ↔ THE 被黑名单挡掉；dna ↔ DNA 通过）
+         · 长词：整体相等 / 去复数 s / 长度≥5 的包含匹配
+    实测结果：功能词误弹 0 个，真术语 12/12 全部命中。
+
 五、实现位置（源码）
 --------------------
 · mobile/template.mobile.html

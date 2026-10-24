@@ -378,9 +378,66 @@ function renderOnlineSenses(word, d){
 // ---------- 术语在线：权威科技术语（全国科技术语委） ----------
 // 使用术语在线公开的 drawWordSearch 接口（匿名可用、CORS 开放）。
 // 仅为「用户当前查的这一个词」实时查询，不做批量抓取。
+//
+// 相关性校验：接口按「包含」匹配，会把 the→THE(卫生总费用)、in→IN(智能网)
+// 这类缩写误命中，必须过滤，否则常查词会弹出无关专业术语。
+const TERM_STOPWORDS = (function(){
+  const s = 'a an the and or but if so as of to in on at by for with from into about than then ' +
+            'that this these those is am are was were be been being do does did done have has had ' +
+            'having will would shall should can could may might must not no nor too very just only ' +
+            'also such same other another each every all any some few many much more most less least ' +
+            'he she it they we you i me him her them us my your his its our their who whom whose ' +
+            'which what when where why how there here now then once again ever never always often ' +
+            'sometimes usually up down out off over under further';
+  const o = {};
+  s.split(/\s+/).forEach(function(w){ if(w) o[w] = 1; });
+  return o;
+})();
+
+function termEnVariants(en){
+  const out = [];
+  String(en || '').split(/[,;，；]/).forEach(function(part){
+    const p = part.replace(/[（(].*?[）)]/g, '').trim();
+    if(p) out.push(p);
+  });
+  return out;
+}
+
+function termIsRelevant(query, r){
+  const q = String(query || '').trim();
+  if(!q || !r) return false;
+  const cn = String(r.cn || '').trim();
+  if(/[\u3400-\u9fff\uf900-\ufaff]/.test(q)){
+    if(!cn) return false;
+    return cn === q || cn.indexOf(q) >= 0;
+  }
+  const ql = q.toLowerCase();
+  if(TERM_STOPWORDS[ql]) return false;
+  const vs = termEnVariants(r.en);
+  if(!vs.length) return false;
+  if(ql.length <= 4){
+    for(let i=0;i<vs.length;i++){
+      const v = vs[i], vl = v.toLowerCase();
+      if(vl !== ql) continue;
+      if(q === q.toUpperCase() && v === v.toUpperCase()) return true;
+      if(q !== q.toUpperCase() && v !== v.toUpperCase()) return true;
+      if(ql.length >= 3 && q !== q.toUpperCase() && v === v.toUpperCase()) return true;
+    }
+    return false;
+  }
+  for(let i=0;i<vs.length;i++){
+    const vl = vs[i].toLowerCase();
+    if(vl === ql) return true;
+    if(ql.slice(-1) === 's' && vl === ql.slice(0, -1)) return true;
+    if(ql.length >= 5 && vl.indexOf(ql) >= 0) return true;
+  }
+  return false;
+}
+
 async function fetchTermOnline(term){
   const q = String(term || '').trim();
   if(!q) return null;
+  if(TERM_STOPWORDS[q.toLowerCase()]) return null;
   const url = 'https://www.termonline.cn/main-serve/business/tm/tmWord/drawWordSearch?term=' +
               encodeURIComponent(q);
   try{
@@ -394,6 +451,7 @@ async function fetchTermOnline(term){
     const j = await r.json();
     const res = (j && j.result) || null;
     if(!res || (!res.cn && !res.en)) return null;
+    if(!termIsRelevant(q, res)) return null;
     return res;
   }catch(e){
     return null;
@@ -452,7 +510,7 @@ async function dictSearch(raw){
 
   if(!isCJK){
     const res = lookup(q);
-    const termP = fetchTermOnline(q);
+    const termP = Promise.resolve(fetchTermOnline(q)).catch(function(){ return null; });
 
     if(res && res.entry){
       renderDict(res.entry, q);
@@ -492,7 +550,7 @@ async function dictSearch(raw){
   }
 
   const words = searchZh(q);
-  const termPZh = fetchTermOnline(q);
+  const termPZh = Promise.resolve(fetchTermOnline(q)).catch(function(){ return null; });
   if(words.length){
     renderSearchList(q, words);
     termPZh.then(function(t){
