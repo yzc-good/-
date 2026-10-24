@@ -568,11 +568,15 @@ function showWord(word, el){
     else if(currentLookupWord) q = currentLookupWord;
     if(!q){ q = 'extinction'; } // 无词时给个示例
     const url = 'https://www.termonline.cn/search?searchText=' + encodeURIComponent(q);
-    // 优先用系统浏览器打开（Capacitor WebView 会把 _system 委托给系统浏览器）；
-    // 若在普通浏览器/桌面环境则开新标签页兜底。
+    // Capacitor WebView → 用 _system 交给系统浏览器打开
+    // 普通浏览器/桌面 → 用 _blank 开新标签页
+    const isCap = (typeof window.Capacitor !== 'undefined' &&
+                   window.Capacitor && window.Capacitor.isNativePlatform);
     try{
-      const w = window.open(url, '_system');
+      const w = window.open(url, isCap ? '_system' : '_blank', 'noopener');
       if(w && w.focus) w.focus();
+      // 普通浏览器若被弹窗拦截，fallback 到 location
+      if(!w && !isCap){ location.href = url; }
     }catch(e){
       try{ window.open(url, '_blank', 'noopener'); }catch(e2){}
     }

@@ -470,9 +470,11 @@ function showWord(word){
     else if(currentLookupWord) q = currentLookupWord;
     if(!q){ q = 'extinction'; }
     const url = 'https://www.termonline.cn/search?searchText=' + encodeURIComponent(q);
+    // 桌面/普通浏览器 → 用 _blank 开新标签页
     try{
-      const w = window.open(url, '_system');
+      const w = window.open(url, '_blank', 'noopener');
       if(w && w.focus) w.focus();
+      if(!w){ location.href = url; }
     }catch(e){
       try{ window.open(url, '_blank', 'noopener'); }catch(e2){}
     }
