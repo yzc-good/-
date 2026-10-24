@@ -102,15 +102,17 @@
 ══════════════════════════════════════════════════════
 附录 B · 当前已发布状态（以此为准）
 ══════════════════════════════════════════════════════
-   装机包 v1.3（versionCode 4）   EnglishTranslator-v1.3.apk
-   网页内容版 web-3               publish_update\web-3.zip（需上传 update/）
-   仓库 update.json               指向 web-3，type=web
+   装机包 v1.4（versionCode 5）   EnglishTranslator-v1.4.apk
+   网页内容版 web-4               publish_update\web-4.zip（需上传 update/）
+   仓库 update.json               type=both，指向 web-4 + v1.4 整包
 
+   ★ v1.4 改了什么：新增「中英双向互译」
+     导入中文文档会输出英文译文，逐行自动识别方向，中英混排也支持。
    ★ v1.3 改了什么：更新检查改为「多镜像并发」
      （GitHub 官方 + ghfast.top + ghproxy.net + jsDelivr），
      国内网络访问 GitHub raw 超时也能正常检查更新。
-   ★ 注意：旧仓库里的 web-2.zip 请用 web-3.zip 替换或保留都行，
-     但 update.json 必须换成新的（指向 web-3），否则新版会被判成"有旧更新"。
+   ★ 注意：update.json 换成新的（指向 web-4 且带 apk 字段），
+     这样 v1.3 及更早的版本能收到「整包升级」提示。
 
 ══════════════════════════════════════════════════════
 附录 C · 版本号一致性（重要，别踩坑）
