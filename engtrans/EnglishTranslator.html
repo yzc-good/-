@@ -42,6 +42,11 @@ main{padding:22px 28px;display:flex;gap:20px;align-items:flex-start}
 .dict-search input{flex:1 1 auto;min-width:0;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fafbfe;color:var(--ink)}
 .dict-search input:focus{outline:none;border-color:#93c5fd;background:#fff}
 .dict-search button{flex:0 0 auto;font-size:13px;padding:8px 14px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+.term-line{display:flex;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--line);background:#f6faf7;flex:0 0 auto}
+.term-line button{flex:0 0 auto;font-size:12.5px;padding:6px 12px;border:none;border-radius:8px;background:#15803d;color:#fff;font-weight:600;cursor:pointer}
+.term-line button:hover{opacity:.9}
+.term-line .term-note{font-size:11px;color:#6b7280;line-height:1.4;min-width:0}
+@media (max-width:520px){ .term-line{flex-direction:column;align-items:flex-start;gap:4px} }
 .word{color:#1d4ed8;cursor:pointer;border-radius:3px;transition:background .1s;padding:0 1px}
 .word:hover{background:#dbeafe}
 .word.active{background:#fde68a}
@@ -139,6 +144,10 @@ a.linkbtn:hover,button.linkbtn:hover{background:#e0e7ff}
         <input type="search" id="dictSearch" enterkeyhint="search" autocomplete="off"
                placeholder="输入英文或中文，如 extinction / 灭绝">
         <button id="dictSearchBtn" title="查词">查</button>
+      </div>
+      <div class="term-line">
+        <button id="termOnlineBtn" title="跳转到术语在线，查询权威科技术语">🔬 术语在线（科学术语权威）</button>
+        <span class="term-note">联网后，可直接在「术语在线」查标准译名（全国科技术语委）</span>
       </div>
       <div class="dict-body" id="dictBody">
         <div class="dict-empty">点击左侧任意英文单词，这里会显示它在牛津词典中的释义。</div>
@@ -443,10 +452,32 @@ async function dictSearch(raw){
 })();
 
 // 点击/悬停取词入口：拆分 lookup() 的返回值，把 entry 交给 renderDict
+let currentLookupWord = '';
 function showWord(word){
+  currentLookupWord = word || '';
   const res = lookup(word);
   renderDict(res ? res.entry : null, word);
 }
+
+// 术语在线：联网跳转到权威科技术语平台查标准译名
+(function(){
+  const btn = document.getElementById('termOnlineBtn');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    let q = '';
+    const input = document.getElementById('dictSearch');
+    if(input && String(input.value||'').trim()) q = String(input.value).trim();
+    else if(currentLookupWord) q = currentLookupWord;
+    if(!q){ q = 'extinction'; }
+    const url = 'https://www.termonline.cn/search?searchText=' + encodeURIComponent(q);
+    try{
+      const w = window.open(url, '_system');
+      if(w && w.focus) w.focus();
+    }catch(e){
+      try{ window.open(url, '_blank', 'noopener'); }catch(e2){}
+    }
+  });
+})();
 
 // 未收录词的联网翻译（需要本地服务）
 async function wordOnline(word){

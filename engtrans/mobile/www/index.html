@@ -54,6 +54,12 @@ main{padding:22px 28px;display:flex;gap:20px;align-items:flex-start}
 .dict-search input:focus{outline:none;border-color:#93c5fd;background:#fff}
 .dict-search button{flex:0 0 auto;font-size:13px;padding:8px 14px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
 .dict-search button:active{opacity:.85}
+/* 术语在线入口 */
+.term-line{display:flex;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--line);background:#f6faf7;flex:0 0 auto}
+.term-line button{flex:0 0 auto;font-size:12.5px;padding:6px 12px;border:none;border-radius:8px;background:#15803d;color:#fff;font-weight:600;cursor:pointer}
+.term-line button:active{opacity:.85}
+.term-line .term-note{font-size:11px;color:#6b7280;line-height:1.4;min-width:0}
+@media (max-width:520px){ .term-line{flex-direction:column;align-items:flex-start;gap:4px} }
 .dict-body{padding:0;max-height:70vh;overflow:auto}
 .dict-empty{padding:28px 18px;color:var(--muted);font-size:13px;text-align:center}
 .dict-card{padding:16px;border-bottom:1px solid var(--line)}
@@ -215,6 +221,11 @@ a.linkbtn:hover,button.linkbtn:hover{background:#e0e7ff}
         <input type="search" id="dictSearch" enterkeyhint="search" autocomplete="off"
                placeholder="输入英文或中文，如 extinction / 灭绝">
         <button id="dictSearchBtn" title="查词">查</button>
+      </div>
+      <!-- 术语在线：联网跳转到全国科技术语权威平台 -->
+      <div class="term-line">
+        <button id="termOnlineBtn" title="跳转到术语在线，查询权威科技术语">🔬 术语在线（科学术语权威）</button>
+        <span class="term-note">联网后，可直接在「术语在线」查标准译名（全国科技术语委）</span>
       </div>
       <div class="dict-body" id="dictBody">
         <div class="dict-empty">点击左侧任意英文单词，这里会显示它在牛津词典中的释义。</div>
@@ -537,12 +548,36 @@ async function dictSearch(raw){
 })();
 
 // 点击/悬停取词入口：拆分 lookup() 的返回值，把 entry 交给 renderDict
+let currentLookupWord = '';
 function showWord(word, el){
+  currentLookupWord = word || '';
   const res = lookup(word);
   renderDict(res ? res.entry : null, word);
   // 手机竖屏：把词典窗浮到被点单词下方（没传元素时贴底显示）
   if(typeof window.openDictSheet === 'function') window.openDictSheet(el || null);
 }
+
+// 术语在线：联网跳转到权威科技术语平台查标准译名
+(function(){
+  const btn = document.getElementById('termOnlineBtn');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    let q = '';
+    const input = document.getElementById('dictSearch');
+    if(input && String(input.value||'').trim()) q = String(input.value).trim();
+    else if(currentLookupWord) q = currentLookupWord;
+    if(!q){ q = 'extinction'; } // 无词时给个示例
+    const url = 'https://www.termonline.cn/search?searchText=' + encodeURIComponent(q);
+    // 优先用系统浏览器打开（Capacitor WebView 会把 _system 委托给系统浏览器）；
+    // 若在普通浏览器/桌面环境则开新标签页兜底。
+    try{
+      const w = window.open(url, '_system');
+      if(w && w.focus) w.focus();
+    }catch(e){
+      try{ window.open(url, '_blank', 'noopener'); }catch(e2){}
+    }
+  });
+})();
 
 // ---------- 手机竖屏：跟随单词的浮动词典窗 ----------
 (function(){
