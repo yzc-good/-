@@ -1,0 +1,14 @@
+{
+  "android": {
+    "webVersion": 2,
+    "type": "web",
+    "files": [
+      {
+        "name": "web-2.zip",
+        "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/web-2.zip",
+        "size": 1154564,
+        "sha256": "9c3e2e85766a824938a326343d9bf42059d2c427655aa08ab1a084701b42eaba"
+      }
+    ]
+  }
+}
