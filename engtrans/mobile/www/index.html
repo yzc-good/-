@@ -487,7 +487,7 @@ async function loadTextFile(text, fileName){
     const done = await translateEntries(entries);
     showBanner(done>0?'ok':'warn',
       done>0 ? '已导入并翻译「'+esc(fileName)+'」：'+done+' / '+entries.length+' 行。'
-             : '已导入「'+esc(fileName)+'」：'+entries.length+' 行（联网翻译失败，仅显示原文）。');
+             : '已导入「'+esc(fileName)+'」：'+entries.length+' 行。'+esc(translateFailHint()));
   } else {
     showBanner('ok', '已导入「'+esc(fileName)+'」：'+entries.length+' 行（'+dirSummary(entries)+'）。勾选「导入时联网自动翻译」可生成译文。');
   }
@@ -691,6 +691,46 @@ async function httpGet(url, headers, ms){
 
 async function httpJson(url, headers, ms){
   const r = await httpGet(url, headers, ms);
+  if(r.status && r.status >= 400) throw new Error('HTTP '+r.status);
+  try{ return JSON.parse(r.text); }
+  catch(e){ throw new Error('返回内容不是 JSON'); }
+}
+
+// POST（表单）-> {status, text}；用于有道整句翻译接口
+async function httpPost(url, body, headers, ms){
+  const timeout = ms || 15000;
+  const hdr = Object.assign({'Content-Type':'application/x-www-form-urlencoded'}, headers || {});
+  const cap = capBridge();
+
+  // 1) 原生通道（不受 CORS 限制）
+  if(cap && typeof cap.nativePromise === 'function'){
+    try{
+      const res = await cap.nativePromise('CapacitorHttp', 'request', {
+        url: url,
+        method: 'POST',
+        headers: hdr,
+        data: body,
+        connectTimeout: 12000,
+        readTimeout: timeout,
+        responseType: 'text'
+      });
+      if(res && (res.status === 0 || res.status)){
+        let data = res.data;
+        if(data && typeof data === 'object') data = JSON.stringify(data);
+        return {status: res.status || 0, text: String(data == null ? '' : data)};
+      }
+    }catch(e){ /* 落到下一层 */ }
+  }
+
+  // 2) 普通 fetch
+  const r = await fetchWithTimeout(url, {
+    method:'POST', headers: hdr, body: body, cache:'no-store'
+  }, timeout);
+  return {status: r.status, text: await r.text()};
+}
+
+async function httpPostJson(url, body, headers, ms){
+  const r = await httpPost(url, body, headers, ms);
   if(r.status && r.status >= 400) throw new Error('HTTP '+r.status);
   try{ return JSON.parse(r.text); }
   catch(e){ throw new Error('返回内容不是 JSON'); }
@@ -924,42 +964,90 @@ function chunkByEncodedLen(text, budget){
   return final;
 }
 
-async function translateOne(text, isZ2E){
-  const q = encodeURIComponent(text);
+// 最近一次翻译失败的原因（用于给用户看提示）
+let lastTranslateError = '';
+
+// --- 有道整句翻译（国内直连、无需密钥，作为首选）---
+// POST https://aidemo.youdao.com/trans  q/from/to -> {errorCode:0, translation:[...]}
+async function translateByYoudao(text, isZ2E){
+  const body = 'q=' + encodeURIComponent(text)
+             + '&from=' + (isZ2E ? 'zh-CHS' : 'en')
+             + '&to='   + (isZ2E ? 'en' : 'zh-CHS');
+  const j = await httpPostJson('https://aidemo.youdao.com/trans', body,
+      {'User-Agent': YOUDAO_HEADERS['User-Agent'], 'Referer': 'https://fanyi.youdao.com/'}, 15000);
+  if(!j) throw new Error('空响应');
+  // 注意：接口返回的 errorCode 是字符串 "0"，必须用 Number() 比较
+  const code = j.errorCode;
+  if(code !== undefined && code !== null && Number(code) !== 0) throw new Error('errorCode ' + code);
+  const arr = j.translation;
+  return (Array.isArray(arr) ? arr.join('') : String(arr || '')).trim();
+}
+
+// --- MyMemory（免费；按 IP 有每日额度，超了返回 429）---
+async function translateByMyMemory(text, isZ2E){
   const clean = s => String(s||'')
       .replace(/\s*[\[【「].*$/,'')
       .replace(/MYMEMORY[\s\S]*$/,'')
       .replace(/\s+/g,' ').trim();
-  // 译文有效性：英→中要求含汉字；中→英要求含英文单词且基本不含汉字
-  const valid = s => isZ2E
-      ? (/[A-Za-z]{2,}/.test(s) && !/[\u4e00-\u9fff]/.test(s))
-      : /[\u4e00-\u9fff]/.test(s);
   const pair = isZ2E ? 'zh-CN|en' : 'en|zh-CN';
-
-  // 1) MyMemory（免费、国内可达；偶尔 429，退避重试一次）
+  const q = encodeURIComponent(text);
+  let lastErr = null;
   for(let attempt=0; attempt<2; attempt++){
     try{
       const j = await httpJson('https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair,
         {'Accept':'application/json'}, 12000);
-      const mt = clean((j.responseData||{}).translatedText);
-      if(mt && valid(mt)) return mt;
-      break;
+      return clean((j.responseData||{}).translatedText);
     }catch(e){
-      if(attempt === 0){ await new Promise(r=>setTimeout(r, 700)); }
+      lastErr = e;
+      if(attempt === 0){ await new Promise(r=>setTimeout(r, 600)); }
     }
   }
+  throw lastErr || new Error('无结果');
+}
 
-  // 2) Google gtx（海外/可访问时）
-  try{
-    const sl = isZ2E ? 'zh-CN' : 'en';
-    const tl = isZ2E ? 'en' : 'zh-CN';
-    const j = await httpJson('https://translate.googleapis.com/translate_a/single?client=gtx&sl='+sl+'&tl='+tl+'&dt=t&q=' + q,
-      {}, 12000);
-    const mt = clean((Array.isArray(j) && Array.isArray(j[0])) ? j[0].map(x=>(x&&x[0])||'').join('') : '');
-    if(mt && valid(mt)) return mt;
-  }catch(e){}
+// --- Google gtx（海外可用，国内通常被墙）---
+async function translateByGoogle(text, isZ2E){
+  const sl = isZ2E ? 'zh-CN' : 'en';
+  const tl = isZ2E ? 'en' : 'zh-CN';
+  const j = await httpJson('https://translate.googleapis.com/translate_a/single?client=gtx&sl='+sl+'&tl='+tl+'&dt=t&q=' + encodeURIComponent(text),
+    {}, 12000);
+  const out = (Array.isArray(j) && Array.isArray(j[0])) ? j[0].map(x=>(x&&x[0])||'').join('') : '';
+  return String(out || '').replace(/\s+/g,' ').trim();
+}
 
+// 依次尝试多个通道，返回第一个通过校验的译文
+async function translateOne(text, isZ2E){
+  // 译文有效性：英→中要求含汉字；中→英要求含英文单词且基本不含汉字
+  const valid = s => isZ2E
+      ? (/[A-Za-z]{2,}/.test(s) && !/[\u4e00-\u9fff]/.test(s))
+      : /[\u4e00-\u9fff]/.test(s);
+
+  const chain = [
+    ['有道',     () => translateByYoudao(text, isZ2E)],
+    ['MyMemory', () => translateByMyMemory(text, isZ2E)],
+    ['Google',   () => translateByGoogle(text, isZ2E)],
+  ];
+  const errors = [];
+  for(const item of chain){
+    try{
+      const t = await item[1]();
+      if(t && valid(t)) return t;
+      errors.push(item[0] + ': 结果无效');
+    }catch(e){
+      errors.push(item[0] + ': ' + String((e && e.message) || e).slice(0, 40));
+    }
+  }
+  lastTranslateError = errors.join('；');
   return '';
+}
+
+// 把失败原因翻译成人话，便于用户判断该等一等还是查网络
+function translateFailHint(){
+  const e = lastTranslateError || '';
+  if(/429|Too Many/i.test(e)) return '翻译接口今日免费额度已用完，请明天再试（或换个网络）。';
+  if(/timeout|timed out|超时|abort/i.test(e)) return '翻译接口超时，请检查网络后重试。';
+  if(/errorCode|空响应|HTTP 4|HTTP 5/i.test(e)) return '翻译接口暂时不可用，请稍后重试。';
+  return '联网翻译失败' + (e ? '（' + e + '）' : '') + '，仅显示原文。';
 }
 
 // --- 逐批翻译（小批 + 间隔，避免被限流；支持双向） ---
@@ -1145,7 +1233,7 @@ async function parseAndImport(file){
     showBanner('info','已导入 '+entries.length+' 句（'+dirSummary(entries)+'），正在后台逐句翻译…');
     const done = await translateEntries(entries);
     showBanner(done>0?'ok':'warn',
-      done>0 ? '已翻译 '+done+'/'+entries.length+' 句。':'联网翻译失败（可能无网络），仅显示原文。');
+      done>0 ? '已翻译 '+done+'/'+entries.length+' 句。':translateFailHint());
   } else {
     showBanner('ok','已导入「'+file.name+'」共 '+entries.length+' 句（'+dirSummary(entries)+'）。<br>勾选「导入时联网自动翻译」可生成译文。');
   }

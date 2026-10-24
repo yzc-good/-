@@ -1,20 +1,20 @@
 {
   "android": {
-    "webVersion": 4,
+    "webVersion": 5,
     "type": "both",
     "apk": {
-      "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/EnglishTranslator-v1.5.apk",
-      "versionName": "1.5",
-      "versionCode": 6,
+      "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/EnglishTranslator-v1.6.apk",
+      "versionName": "1.6",
+      "versionCode": 7,
       "size": 4369885,
-      "sha256": "b9672fa91543ca45c6d9c3dd182b22002d76bfcb213ad263dc198f8767a8ce64"
+      "sha256": "fceab43d3447f3de79969b8823615cb3340923e7c502bd6ad08059ada4fd69e7"
     },
     "files": [
       {
-        "name": "web-4.zip",
-        "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/web-4.zip",
-        "size": 1157211,
-        "sha256": "e0f8c0569a5f6244a54ecfcd1e74459ed6a6bb1248d0cf802f3518841d6c0e48"
+        "name": "web-5.zip",
+        "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/web-5.zip",
+        "size": 1158179,
+        "sha256": "e2322ba9ce8e6dea9d231de6236c113d3d341df6a97b061e7e0c3a1f418051cf"
       }
     ]
   }
