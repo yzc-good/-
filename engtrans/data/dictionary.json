@@ -1,0 +1,335 @@
+{
+  "alberta": {
+    "headword": "Alberta",
+    "ipa": "/ælˈbɜːrtə/",
+    "pos": ["proper noun"],
+    "meanings": [{"zh": "阿尔伯塔（加拿大西部省份）", "en": "a province in western Canada, on the border with the US"}],
+    "example": "Alberta's capital is Edmonton. 阿尔伯塔省的首府是埃德蒙顿。",
+    "notes": "加拿大十省之一，以石油与天然气资源闻名，省会为埃德蒙顿。"
+  },
+  "voter": {
+    "headword": "voter",
+    "ipa": "/ˈvoʊtər/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "投票人，选民", "en": "a person who votes or has the right to vote"}],
+    "example": "About 1.9 million voters took part. 约190万选民参与了投票。",
+    "syn": ["elector"], "ant": ["abstainer"]
+  },
+  "overwhelmingly": {
+    "headword": "overwhelmingly",
+    "ipa": "/ˌoʊvərˈwelmɪŋli/",
+    "pos": ["adverb"],
+    "meanings": [{"zh": "压倒性地，绝大多数", "en": "with an extremely large majority; in a way that is overpowering"}],
+    "example": "Voters overwhelmingly rejected the plan. 选民以压倒性多数否决了该计划。"
+  },
+  "reject": {
+    "headword": "reject",
+    "ipa": "/rɪˈdʒekt/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "拒绝，否决；拒收", "en": "to refuse to accept, use, or believe something"}],
+    "example": "The proposal was rejected by voters. 该提案被选民否决。",
+    "syn": ["refuse", "decline", "turn down"], "ant": ["accept", "approve"]
+  },
+  "referendum": {
+    "headword": "referendum",
+    "ipa": "/ˌrefəˈrendəm/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "全民公投，公民投票", "en": "a vote on a particular issue by all the people of a country or region"}],
+    "example": "The province held a referendum on independence. 该省就独立问题举行了公投。"
+  },
+  "proposal": {
+    "headword": "proposal",
+    "ipa": "/prəˈpoʊzl/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "提案，提议；建议", "en": "a plan or suggestion formally put forward"}],
+    "example": "They rejected the proposal to leave Canada. 他们否决了离开加拿大的提案。",
+    "syn": ["suggestion", "scheme", "bid"]
+  },
+  "independence": {
+    "headword": "independence",
+    "ipa": "/ˌɪndɪˈpendəns/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "独立，自立", "en": "the state of being free from the control of another country or authority"}],
+    "example": "The province began the process of independence. 该省启动了独立进程。",
+    "ant": ["dependence"]
+  },
+  "deliver": {
+    "headword": "deliver",
+    "ipa": "/dɪˈlɪvər/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "交付；发表；实现，达成", "en": "to produce, provide, or achieve something promised; to present a speech"}],
+    "example": "The result delivered a victory for unity supporters. 这一结果为统一支持者带来了胜利。"
+  },
+  "decisive": {
+    "headword": "decisive",
+    "ipa": "/dɪˈsaɪsɪv/",
+    "pos": ["adjective"],
+    "meanings": [{"zh": "决定性的；果断的", "en": "producing a definite result; able to make decisions quickly"}],
+    "example": "It was a decisive victory. 这是一场决定性的胜利。",
+    "syn": ["conclusive", "resolute"], "ant": ["indecisive"]
+  },
+  "unity": {
+    "headword": "unity",
+    "ipa": "/ˈjuːnəti/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "统一，团结；一致", "en": "the state of being joined together; harmony"}],
+    "example": "Supporters of Canadian unity celebrated. 加拿大统一的支持者们表示庆祝。",
+    "syn": ["harmony", "solidarity"], "ant": ["division"]
+  },
+  "deepen": {
+    "headword": "deepen",
+    "ipa": "/ˈdiːpən/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "加深，加剧；变深", "en": "to make or become deeper, stronger, or more intense"}],
+    "example": "The result deepened divisions within the movement. 这一结果加深了运动内部的分歧。"
+  },
+  "division": {
+    "headword": "division",
+    "ipa": "/dɪˈvɪʒn/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "分裂，分歧；划分", "en": "disagreement or difference between groups; the act of dividing"}],
+    "example": "There were deep divisions among the separatists. 分裂主义者之间存在深刻分歧。",
+    "syn": ["split", "rift"], "ant": ["unity"]
+  },
+  "separatist": {
+    "headword": "separatist",
+    "ipa": "/ˈseprətɪst/",
+    "pos": ["noun", "adjective"],
+    "meanings": [{"zh": "分裂主义者；主张（与某国）分离的人", "en": "a person who favours independence from an existing state"}],
+    "example": "The separatist movement saw a silver lining. 分裂主义运动看到了有利的一面。"
+  },
+  "movement": {
+    "headword": "movement",
+    "ipa": "/ˈmuːvmənt/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "运动；活动；进展", "en": "a group of people working together to achieve a shared goal; the act of moving"}],
+    "example": "He is a leader of the separatist movement. 他是分裂主义运动的领导人之一。"
+  },
+  "count": {
+    "headword": "count",
+    "ipa": "/kaʊnt/",
+    "pos": ["verb", "noun"],
+    "meanings": [{"zh": "数，清点，计算", "en": "to calculate the total number of something"}],
+    "example": "With nearly 1.9m votes counted. 在已清点的近190万张选票中。"
+  },
+  "roughly": {
+    "headword": "roughly",
+    "ipa": "/ˈrʌfli/",
+    "pos": ["adverb"],
+    "meanings": [{"zh": "大约，粗略地", "en": "approximately; not exactly"}],
+    "example": "Roughly 76% supported remaining. 大约76%的人支持留下。",
+    "syn": ["approximately", "about"]
+  },
+  "support": {
+    "headword": "support",
+    "ipa": "/səˈpɔːrt/",
+    "pos": ["verb", "noun"],
+    "meanings": [{"zh": "支持；支撑；维持", "en": "to agree with and encourage someone or something"}],
+    "example": "24% backed, or supported, separation. 24%的人支持分离。",
+    "syn": ["back", "uphold"], "ant": ["oppose"]
+  },
+  "separation": {
+    "headword": "separation",
+    "ipa": "/ˌsepəˈreɪʃn/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "分离，脱离；分开", "en": "the act of separating or being separated"}],
+    "example": "They began a process toward separation. 他们启动了走向分离的进程。",
+    "ant": ["union"]
+  },
+  "unofficial": {
+    "headword": "unofficial",
+    "ipa": "/ˌʌnəˈfɪʃl/",
+    "pos": ["adjective"],
+    "meanings": [{"zh": "非官方的，非正式的", "en": "not officially confirmed or recognised"}],
+    "example": "According to unofficial results. 根据非官方结果。",
+    "ant": ["official"]
+  },
+  "celebrate": {
+    "headword": "celebrate",
+    "ipa": "/ˈselɪbreɪt/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "庆祝；庆贺", "en": "to do something enjoyable to mark a special event"}],
+    "example": "The prime minister celebrated the result. 总理庆祝了这一结果。"
+  },
+  "race": { "headword": "—", "pos": [], "meanings": [], "hidden": true },
+  "accelerate": {
+    "headword": "accelerate",
+    "ipa": "/əkˈseləreɪt/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "加速，加快；促进", "en": "to make something happen faster or earlier"}],
+    "example": "They will accelerate efforts to diversify trade. 他们将加快贸易多元化的努力。",
+    "syn": ["speed up"], "ant": ["slow down"]
+  },
+  "diversify": {
+    "headword": "diversify",
+    "ipa": "/daɪˈvɜːrsɪfaɪ/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "使多样化；多元化经营", "en": "to increase the range of products, interests, or activities"}],
+    "example": "Efforts to diversify trade. 使贸易多元化的努力。"
+  },
+  "infrastructure": {
+    "headword": "infrastructure",
+    "ipa": "/ˈɪnfrəstrʌktʃər/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "基础设施；基本设施", "en": "the basic systems and services a country or organisation needs, such as roads, power, and water"}],
+    "example": "Major infrastructure projects. 重大基础设施项目。"
+  },
+  "powerhouse": {
+    "headword": "powerhouse",
+    "ipa": "/ˈpaʊərhaʊs/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "强国；重要角色；动力源", "en": "a person or organisation with great power or influence; a source of great energy"}],
+    "example": "Make Canada a global energy powerhouse. 让加拿大成为全球能源强国。"
+  },
+  "centre": {
+    "headword": "centre",
+    "ipa": "/ˈsentər/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "中心，中央", "en": "the middle point or area"}],
+    "example": "With Alberta at its centre. 以阿尔伯塔为中心。",
+    "syn": ["middle", "core"]
+  },
+  "majority": {
+    "headword": "majority",
+    "ipa": "/məˈdʒɔːrəti/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "多数，大多数", "en": "the greater number or part"}],
+    "example": "The overwhelming majority had voted to remain. 绝大多数人投了留加票。",
+    "ant": ["minority"]
+  },
+  "remaining": {
+    "headword": "remain",
+    "ipa": "/rɪˈmeɪn/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "留下；保持；仍然是", "en": "to stay in the same place or condition"}],
+    "example": "They supported remaining in Canada. 他们支持留在加拿大。",
+    "syn": ["stay"]
+  },
+  "owe": {
+    "headword": "owe",
+    "ipa": "/oʊ/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "欠（钱）；应把…归功于", "en": "to be obliged to pay or give something to someone"}],
+    "example": "Someone owes Albertans $130m. 有人欠阿尔伯塔人民1.3亿美元。"
+  },
+  "theatrical": {
+    "headword": "theatrical",
+    "ipa": "/θiˈætrɪkl/",
+    "pos": ["adjective"],
+    "meanings": [{"zh": "戏剧性的；夸张做作的", "en": "exaggerated and over-dramatic, as in a play"}],
+    "example": "This theatrical waste of taxpayers' money. 这场作秀式的浪费纳税人钱财的闹剧。",
+    "syn": ["dramatic", "staged", "showy"]
+  },
+  "taxpayer": {
+    "headword": "taxpayer",
+    "ipa": "/ˈtækspeɪər/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "纳税人", "en": "a person who pays tax"}],
+    "example": "The waste of taxpayers' money. 对纳税人钱财的浪费。"
+  },
+  "pollster": {
+    "headword": "pollster",
+    "ipa": "/ˈpoʊlstər/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "民意调查专家，民调机构人员", "en": "a person or organisation that carries out opinion polls"}],
+    "example": "Pollster David Coletto told the Guardian. 民调专家大卫·科莱托告诉《卫报》。"
+  },
+  "referendum2": { "headword": "referendum", "ipa": "/ˌrefəˈrendəm/", "pos": ["noun"], "meanings": [{"zh": "全民公投", "en": "a general vote on a single issue"}], "example": "Residents felt the referendum was a distraction." },
+  "distraction": {
+    "headword": "distraction",
+    "ipa": "/dɪˈstrækʃn/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "分心的事物；干扰", "en": "something that takes your attention away from what you should be doing"}],
+    "example": "The referendum was seen as a distraction. 这场公投被视为一种干扰。",
+    "syn": ["diversion"] 
+  },
+  "grievance": {
+    "headword": "grievance",
+    "ipa": "/ˈɡriːvəns/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "不满，不平；委屈，抱怨", "en": "a feeling of resentment because of unfair treatment"}],
+    "example": "Most Albertans feel deep grievances with the federal government. 大多数阿尔伯塔人对联邦政府心怀深深不满。",
+    "syn": ["resentment", "complaint"]
+  },
+  "federal": {
+    "headword": "federal",
+    "ipa": "/ˈfedərəl/",
+    "pos": ["adjective"],
+    "meanings": [{"zh": "联邦的；联邦政府的", "en": "relating to the central government of a federation"}],
+    "example": "The federal government. 联邦政府。"
+  },
+  "proudly": {
+    "headword": "proudly",
+    "ipa": "/ˈpraʊdli/",
+    "pos": ["adverb"],
+    "meanings": [{"zh": "自豪地；骄傲地", "en": "in a way that shows pride"}],
+    "example": "Being proudly Canadian. 为自己身为加拿大人而自豪。"
+  },
+  "rocky": {
+    "headword": "rocky",
+    "ipa": "/ˈrɑːki/",
+    "pos": ["adjective"],
+    "meanings": [{"zh": "（关系等）不稳固的，多波折的；（多）岩石的", "en": "difficult and not certain to succeed; full of rocks"}],
+    "example": "The marriage may be rocky at times. 这段\"联姻\"有时可能并不稳固。",
+    "syn": ["unstable", "shaky"]
+  },
+  "willing": {
+    "headword": "willing",
+    "ipa": "/ˈwɪlɪŋ/",
+    "pos": ["adjective"],
+    "meanings": [{"zh": "愿意的；乐意的", "en": "ready and eager to do something"}],
+    "example": "Few are willing to see the marriage end. 很少有人愿意看到这段\"联姻\"走到尽头。",
+    "syn": ["ready", "prepared"]
+  },
+  "silver lining": {
+    "headword": "silver lining",
+    "ipa": "/ˌsɪlvər ˈlaɪnɪŋ/",
+    "pos": ["noun phrase"],
+    "meanings": [{"zh": "困境中的一线希望；乌云背后的金边", "en": "a good aspect of a bad situation"}],
+    "example": "They saw a silver lining. 他们看到了一线希望。"
+  },
+  "fluctuate": {
+    "headword": "fluctuate",
+    "ipa": "/ˈflʌktʃueɪt/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "波动，起伏；涨落", "en": "to change often from one level to another"}],
+    "example": "The numbers are going to fluctuate. 数字将会波动。",
+    "syn": ["vary", "oscillate"]
+  },
+  "treat": {
+    "headword": "treat",
+    "ipa": "/triːt/",
+    "pos": ["verb"],
+    "meanings": [{"zh": "对待；看待；治疗", "en": "to behave towards someone in a particular way"}],
+    "example": "Alberta needs to be treated better. 阿尔伯塔应该得到更好的对待。"
+  },
+  "waste": {
+    "headword": "waste",
+    "ipa": "/weɪst/",
+    "pos": ["verb", "noun"],
+    "meanings": [{"zh": "浪费；滥用", "en": "to use too much of something, especially in an unwise way"}],
+    "example": "A waste of taxpayers' money. 对纳税人钱财的浪费。"
+  },
+  "general": {
+    "headword": "general",
+    "ipa": "/ˈdʒenərəl/",
+    "pos": ["adjective"],
+    "meanings": [{"zh": "普遍的；总的；一般的", "en": "involving most people or things; overall"}],
+    "example": "There was a general sadness. 人们普遍感到悲哀。"
+  },
+  "threat": {
+    "headword": "threat",
+    "ipa": "/θret/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "威胁；恐吓", "en": "a danger or possible harm"}],
+    "example": "The more real threats they see. 他们眼中更现实的威胁。",
+    "syn": ["danger", "menace"]
+  },
+  "administration": {
+    "headword": "administration",
+    "ipa": "/ədˌmɪnɪˈstreɪʃn/",
+    "pos": ["noun"],
+    "meanings": [{"zh": "政府，行政机构；（政府）任期", "en": "the government of a country; the people who run it"}],
+    "example": "The Trump administration. 特朗普政府。"
+  }
+}

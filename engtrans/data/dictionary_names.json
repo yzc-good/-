@@ -1,0 +1,12 @@
+{
+  "mark carney": {"headword":"Mark Carney","ipa":"/mɑːrk ˈkɑːrni/","pos":["proper noun"],"meanings":[{"zh":"马克·卡尼（人名，本文指加拿大总理）","en":"name of a person"}],"example":"Prime minister Mark Carney. 加拿大总理马克·卡尼。"},
+  "carney": {"headword":"Carney","ipa":"/ˈkɑːrni/","pos":["proper noun"],"meanings":[{"zh":"卡尼（姓）","en":"a surname"}],"example":"Mark Carney is the prime minister. 马克·卡尼是总理。"},
+  "edmonton": {"headword":"Edmonton","ipa":"/ˈedməntən/","pos":["proper noun"],"meanings":[{"zh":"埃德蒙顿（阿尔伯塔省省会）","en":"capital city of Alberta, Canada"}],"example":"He grew up in Edmonton. 他在埃德蒙顿长大。"},
+  "david coletto": {"headword":"David Coletto","ipa":"/ˈdeɪvɪd koʊˈletoʊ/","pos":["proper noun"],"meanings":[{"zh":"大卫·科莱托（人名，民意调查专家）","en":"name of a person"}],"example":"Pollster David Coletto. 民意调查专家大卫·科莱托。"},
+  "coletto": {"headword":"Coletto","ipa":"/koʊˈletoʊ/","pos":["proper noun"],"meanings":[{"zh":"科莱托（姓）","en":"a surname"}],"example":"David Coletto is a pollster. 大卫·科莱托是民意调查专家。"},
+  "guardian": {"headword":"The Guardian","ipa":"/ˈɡɑːrdiən/","pos":["proper noun"],"meanings":[{"zh":"《卫报》（英国报纸）","en":"a British newspaper"}],"example":"Told the Guardian. 告诉《卫报》。"},
+  "keith wilson": {"headword":"Keith Wilson","ipa":"/kiːθ ˈwɪlsən/","pos":["proper noun"],"meanings":[{"zh":"基思·威尔逊（人名，分裂运动领导人）","en":"name of a person"}],"example":"Said Keith Wilson. 基思·威尔逊说。"},
+  "wilson": {"headword":"Wilson","ipa":"/ˈwɪlsən/","pos":["proper noun"],"meanings":[{"zh":"威尔逊（姓）","en":"a surname"}],"example":"Keith Wilson. 基思·威尔逊。"},
+  "trump": {"headword":"Trump","ipa":"/trʌmp/","pos":["proper noun"],"meanings":[{"zh":"特朗普（美国前总统姓氏）","en":"the surname of former US president Donald Trump"}],"example":"The Trump administration. 特朗普政府。"},
+  "alberta province": {"headword":"Alberta","ipa":"/ælˈbɜːrtə/","pos":["proper noun"],"meanings":[{"zh":"阿尔伯塔（加拿大西部省份）","en":"a province in western Canada"}],"example":"Alberta's capital is Edmonton. 阿尔伯塔省的首都是埃德蒙顿。"}
+}

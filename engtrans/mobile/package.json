@@ -1,0 +1,20 @@
+{
+  "name": "engtranslator-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "英语翻译助手 Android 版",
+  "main": "index.js",
+  "scripts": {
+    "sync": "npx cap sync android",
+    "build": "npx cap copy android",
+    "open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0"
+  }
+}

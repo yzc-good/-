@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="my_images" path="." />
+    <cache-path name="my_cache_images" path="." />
+    <!-- 远程更新：APK 下载到应用内部 files 目录，用 FileProvider 暴露给系统安装器 -->
+    <files-path name="my_files" path="." />
+</paths>
