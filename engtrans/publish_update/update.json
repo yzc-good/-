@@ -1,13 +1,13 @@
 {
   "android": {
-    "webVersion": 10,
+    "webVersion": 11,
     "type": "web",
     "files": [
       {
-        "name": "web-10.zip",
-        "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/web-10.zip",
-        "size": 1168398,
-        "sha256": "3a80e17e55ae0d04567a3a8fdde3f733f19fa2171cfeb0b3e435507ce8942d4b"
+        "name": "web-11.zip",
+        "url": "https://raw.githubusercontent.com/yzc-good/-/main/update/web-11.zip",
+        "size": 1168861,
+        "sha256": "be71f8dc240e134dbc78af8d08ef29ccd22f4bb16e6e83001e878be208502e74"
       }
     ]
   }

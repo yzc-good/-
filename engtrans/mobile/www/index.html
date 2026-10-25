@@ -166,6 +166,26 @@ a.linkbtn:hover,button.linkbtn:hover{background:#e0e7ff}
 @media(min-width:821px) and (max-width:1100px){
   .right{width:300px}
 }
+/* 平板横屏（宽而矮）：词典固定在右上方，避免被长段落挤到屏幕下方 */
+@media(min-width:821px) and (orientation:landscape){
+  aside.right{
+    position:fixed;
+    top:14px;
+    right:14px;
+    width:320px;
+    max-height:calc(100vh - 28px);
+    z-index:40;
+  }
+  aside.right .dict-panel{
+    display:flex;
+    flex-direction:column;
+    max-height:calc(100vh - 28px);
+  }
+  aside.right .dict-body{flex:1 1 auto;max-height:none;overflow:auto}
+  /* 右侧不再占位，正文让出空间，避免被浮层压住 */
+  main{padding-right:360px}
+  header{padding-right:360px}
+}
 /* 触控优化：词条点击区域更友好 */
 @media(pointer:coarse){
   .word{padding:1px 3px;border-radius:5px}
@@ -873,11 +893,22 @@ function showWord(word, el){
   }
   window.addEventListener('scroll', onScroll, {passive:true});
 
+  // 退出浮动模式（如平板从竖屏转横屏）：必须清掉内联定位，
+  // 否则残留的 top/height 会把右侧的固定侧栏顶到屏幕下方，遮住释义。
+  function exitFloatMode(){
+    closeDictSheet();
+    customH = 0;
+    sheet.style.removeProperty('top');
+    sheet.style.removeProperty('height');
+  }
+
   // 转屏/改宽度：回大屏就收起；仍在窄屏则重新定位
   window.addEventListener('resize', function(){
-    if(!isMobile()){ closeDictSheet(); return; }
+    if(!isMobile()){ exitFloatMode(); return; }
     if(sheet.classList.contains('open')) place();
   });
+  // 横屏时初始加载就清一次，保证右侧栏贴顶
+  if(!isMobile()) exitFloatMode();
 
   // 拖动顶部横条：上滑加高、下滑变矮，拖太矮则收起
   let dragging = false, startY = 0, startH = 0;
