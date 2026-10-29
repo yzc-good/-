@@ -2040,10 +2040,18 @@ function entriesFromDoc(text){
 
   const synth = window.speechSynthesis || null;
   if(!synth){
-    bar.classList.add('tts-unsupported');
-    if(stateEl) stateEl.textContent = '此设备不支持语音朗读';
-    if(playBtn) playBtn.disabled = true;
-    return;
+    // 系统无语音引擎 → 不报错，直接改用在线语音
+    // （鸿蒙/部分 Android WebView 没有 speechSynthesis）
+  }
+
+  function updateEngineHint(){
+    if(!stateEl) return;
+    if(engine === 'online'){
+      stateEl.textContent = '在线语音（需联网）';
+      stateEl.style.color = '#b45309';
+    } else if(engine === 'system'){
+      stateEl.style.color = '#15803d';
+    }
   }
 
   let idx = 0;              // 当前读到第几句
@@ -2080,7 +2088,7 @@ function entriesFromDoc(text){
   function isEnglishText(t){ return /[A-Za-z]/.test(t) && !/[\u4e00-\u9fff]/.test(t); }
 
   function pickVoice(lang){
-    const vs = synth.getVoices() || [];
+    const vs = (synth && synth.getVoices) ? (synth.getVoices() || []) : [];
     if(!vs.length) return null;
     const want = lang.slice(0,2).toLowerCase();
     // 优先精确匹配语言，再退到前缀匹配
@@ -2124,26 +2132,162 @@ function entriesFromDoc(text){
 
   function cancelWatchdog(){ if(watchdog){ clearTimeout(watchdog); watchdog = 0; } }
 
+  // ============ 双引擎朗读 ============
+  // 引擎1：系统 speechSynthesis（离线、免费，但部分 Android WebView 缺失）
+  // 引擎2：在线语音（百度/道词典 mp3），系统引擎不可用时自动接管
+  let engine = 'none';          // 'system' | 'online'
+  let curAudio = null;          // 在线引擎当前的 Audio 对象
+  let audioCache = {};          // url -> objectURL，避免重复请求
+  let probePromise = null;      // 系统引擎可用性探测
+
+  const hasSys = function(){
+    return !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  };
+
+  // 探测系统引擎是否真的能发声（有对象不等于有语音包）
+  // 说明：不追求「精确判断」，只要能在 1.5 秒内看到 onstart 就算可用；
+  // 否则降级到在线语音。真正播放时若仍失败，speakOne 里还会再降级一次。
+  function probeSystem(){
+    if(probePromise) return probePromise;
+    probePromise = new Promise(function(resolve){
+      if(!hasSys()){ resolve(false); return; }
+      let done = false;
+      const finish = function(ok){
+        if(done) return; done = true;
+        try{ window.speechSynthesis.cancel(); }catch(e){}
+        resolve(ok);
+      };
+      // 语音列表为空 → 大概率没有可用语音包
+      let waitList = 0;
+      (function checkVoices(){
+        let vs = [];
+        try{ vs = window.speechSynthesis.getVoices() || []; }catch(e){}
+        if(vs.length){ runProbe(); return; }
+        if(waitList++ >= 10){ finish(false); return; }   // 等约 2 秒
+        setTimeout(checkVoices, 200);
+      })();
+
+      function runProbe(){
+        let started = false;
+        try{
+          const u = new window.SpeechSynthesisUtterance('a');
+          u.volume = 0; u.rate = 2;
+          u.onstart = function(){ started = true; finish(true); };
+          u.onerror = function(){ if(!started) finish(false); };
+          window.speechSynthesis.speak(u);
+          // 2 秒内没 onstart → 认为不可用
+          setTimeout(function(){ if(!started) finish(false); }, 2000);
+        }catch(e){ finish(false); }
+      }
+    });
+    return probePromise;
+  }
+
+  // 构造在线语音 URL（百度 fanyi，质量较好，支持中英文长句）
+  function onlineUrl(text, lang){
+    const isZh = !isEnglishText(text);
+    const lan = isZh ? 'zh' : 'en';
+    return 'https://fanyi.baidu.com/gettts?lan=' + lan +
+           '&text=' + encodeURIComponent(text) + '&spd=3&source=web';
+  }
+
+  // 预取音频：用 CapacitorHttp 绕开 CORS 拿到二进制，转成 objectURL
+  async function fetchAudioBlob(url){
+    if(audioCache[url]) return audioCache[url];
+    // 优先 CapacitorHttp（原生请求，不受 CORS 限制，可拿 base64/arraybuffer）
+    const cap = capBridge();
+    if(cap && typeof cap.nativePromise === 'function'){
+      try{
+        const res = await cap.nativePromise('CapacitorHttp', 'request', {
+          url: url, method: 'GET',
+          headers: { 'Accept':'audio/mpeg', 'Referer':'https://fanyi.baidu.com/' },
+          responseType: 'arraybuffer',
+          connectTimeout: 12000, readTimeout: 20000
+        });
+        const data = res && res.data;
+        if(data && typeof data === 'string' && data.length > 200){
+          // 返回的是 base64
+          const bin = atob(data);
+          const arr = new Uint8Array(bin.length);
+          for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+          const b = new Blob([arr], {type:'audio/mpeg'});
+          const u = URL.createObjectURL(b);
+          audioCache[url] = u;
+          return u;
+        }
+      }catch(e){ /* 落到 fetch */ }
+    }
+    // 退回 fetch（桌面浏览器同源/CORS 允许时可用）
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const b = await r.blob();
+    if(!b.size) throw new Error('音频为空');
+    const u = URL.createObjectURL(b);
+    audioCache[url] = u;
+    return u;
+  }
+
+  // 用在线引擎读一段；读完/失败都调用 done
+  function speakOneOnline(text, lang, done){
+    const myToken = token;
+    let finished = false;
+    const finish = function(){
+      if(finished) return; finished = true;
+      if(myToken !== token) return;
+      done();
+    };
+    const url = onlineUrl(text);
+    fetchAudioBlob(url).then(function(objUrl){
+      if(myToken !== token){ return; }
+      const a = new Audio(objUrl);
+      curAudio = a;
+      a.playbackRate = Math.max(0.5, Math.min(2, RATE()));
+      a.onended = finish;
+      a.onerror = finish;
+      const p = a.play();
+      if(p && p.catch){ p.catch(function(){ finish(); }); }
+      // 音频加载/播放异常时兜底
+      cancelWatchdog();
+      const est = Math.max(1500, text.length * 90 / RATE());
+      watchdog = setTimeout(finish, est + 2500);
+    }).catch(function(){
+      finish();
+    });
+  }
+
   // 朗读一句；读完调用 done()
   function speakOne(text, lang, done){
     const myToken = token;
-    const u = new SpeechSynthesisUtterance(text);
+
+    if(engine === 'online'){ speakOneOnline(text, lang, done); return; }
+
+    // 系统引擎
+    const u = new window.SpeechSynthesisUtterance(text);
     u.lang = lang;
     u.rate = Math.max(0.5, Math.min(2, RATE()));
     const v = pickVoice(lang);
     if(v) u.voice = v;
 
     let finished = false;
-    const finish = function(){
+    let started = false;
+    const finish = function(ok){
       if(finished) return;
       finished = true;
       cancelWatchdog();
       if(myToken !== token) return;   // 已被新的操作取代
+      if(!ok && !started){
+        // 系统引擎这次没起来 → 永久切到在线引擎并重读这句
+        engine = 'online';
+        updateEngineHint();
+        speakOneOnline(text, lang, done);
+        return;
+      }
       done();
     };
 
-    u.onend = finish;
-    u.onerror = finish;   // 出错也往下走，避免整篇卡死
+    u.onstart = function(){ started = true; };
+    u.onend = function(){ finish(true); };
+    u.onerror = function(){ finish(false); };   // 出错尝试降级
 
     // 安卓 WebView 上 onend 经常不触发 → 按估算时长兜底
     // 英文约 2.6 词/秒、中文约 4 字/秒，再乘语速
@@ -2151,9 +2295,9 @@ function entriesFromDoc(text){
     const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
     const est = Math.max(1.2, (words/2.6 + cjk/4) / RATE()) * 1000;
     cancelWatchdog();
-    watchdog = setTimeout(finish, est + 1800);
+    watchdog = setTimeout(function(){ finish(true); }, est + 1800);
 
-    try{ synth.speak(u); }catch(e){ finish(); }
+    try{ window.speechSynthesis.speak(u); }catch(e){ finish(false); }
   }
 
   // 读第 i 句：先英文，再（可选）中文；读完继续下一句
@@ -2170,66 +2314,103 @@ function entriesFromDoc(text){
     if(bump !== false){ token++; }
     const myToken = token;
     syncButtons();
-    setState('朗读中 ' + (i+1) + '/' + currentEntries.length);
 
-    const parts = textOf(i);
-    if(!parts){ stopPlay(''); return; }
-    highlight(i);
-
-    // 组装本句要读的片段
-    const seqs = [];
-    if(parts.en) seqs.push({ text: parts.en, lang: isEnglishText(parts.en) ? 'en-US' : 'zh-CN' });
-    if(wantZh() && parts.zh && !isEnglishText(parts.zh)) seqs.push({ text: parts.zh, lang: 'zh-CN' });
-
-    if(!seqs.length){
-      // 这句没有可读内容（例如整句未翻译的中文），跳过
-      if(myToken === token) playFrom(i+1, false);
+    // 首次播放：先探测系统引擎是否真的能用，不能用就切在线语音
+    if(engine === 'none'){
+      setState('正在准备语音…');
+      probeSystem().then(function(ok){
+        if(myToken !== token) return;
+        engine = ok ? 'system' : 'online';
+        updateEngineHint();
+        if(engine === 'online' && stateEl){
+          setState('在线语音 · 第 ' + (idx+1) + '/' + currentEntries.length);
+        } else {
+          setState('朗读中 ' + (idx+1) + '/' + currentEntries.length);
+        }
+        startSeqs();
+      });
       return;
     }
+    setState('朗读中 ' + (i+1) + '/' + currentEntries.length);
+    var parts0 = textOf(i);
+    if(!parts0){ stopPlay(''); return; }
+    highlight(i);
+    startSeqs();
 
-    let k = 0;
-    const step = function(){
-      if(myToken !== token || !playing) return;
-      if(k >= seqs.length){
-        // 本句读完 → 下一句（留一点间隔更自然）
-        setTimeout(function(){
-          if(myToken === token && playing && !paused) playFrom(i+1, false);
-        }, 260);
+    function startSeqs(){
+      const parts = textOf(i);
+      if(!parts){ stopPlay(''); return; }
+      highlight(i);
+
+      // 组装本句要读的片段
+      const seqs = [];
+      if(parts.en) seqs.push({ text: parts.en, lang: isEnglishText(parts.en) ? 'en-US' : 'zh-CN' });
+      if(wantZh() && parts.zh && !isEnglishText(parts.zh)) seqs.push({ text: parts.zh, lang: 'zh-CN' });
+
+      if(!seqs.length){
+        // 这句没有可读内容（例如整句未翻译的中文），跳过
+        if(myToken === token) playFrom(i+1, false);
         return;
       }
-      const s = seqs[k++];
-      speakOne(s.text, s.lang, step);
-    };
-    step();
+
+      let k = 0;
+      const step = function(){
+        if(myToken !== token || !playing) return;
+        if(k >= seqs.length){
+          // 本句读完 → 下一句（留一点间隔更自然）
+          setTimeout(function(){
+            if(myToken === token && playing && !paused) playFrom(i+1, false);
+          }, engine === 'online' ? 120 : 260);
+          return;
+        }
+        const s = seqs[k++];
+        speakOne(s.text, s.lang, step);
+      };
+      step();
+    }
   }
 
   function stopPlay(msg){
     token++;
     playing = false; paused = false;
     cancelWatchdog();
-    try{ synth.cancel(); }catch(e){}
+    try{ if(synth) synth.cancel(); }catch(e){}
+    // 在线引擎：停掉当前音频
+    try{
+      if(curAudio){ curAudio.pause(); curAudio.onended = null; curAudio.onerror = null; curAudio = null; }
+    }catch(e){}
     clearHighlight();
     syncButtons();
     setState(msg || '');
+    if(!msg) updateEngineHint();
   }
 
   function pausePlay(){
     if(!playing) return;
     if(paused){
+      // 继续
       paused = false;
       syncButtons();
       setState('朗读中 ' + (idx+1) + '/' + currentEntries.length);
-      try{ synth.resume(); }catch(e){}
-      // 某些设备 resume 无效 → 重新读当前句
-      if(!synth.speaking && !synth.pending){
-        const back = token; playFrom(idx);
-        token = back;
+      if(engine === 'online'){
+        if(curAudio){ try{ curAudio.play(); }catch(e){} }
+        else { playFrom(idx, false); }
+      } else {
+        try{ if(synth) synth.resume(); }catch(e){}
+        // 某些设备 resume 无效 → 重新读当前句
+        if(synth && !synth.speaking && !synth.pending){
+          playFrom(idx, false);
+        }
       }
     } else {
       paused = true;
       syncButtons();
       setState('已暂停');
-      try{ synth.pause(); }catch(e){}
+      if(engine === 'online'){
+        if(curAudio){ try{ curAudio.pause(); }catch(e){} }
+      } else {
+        try{ if(synth) synth.pause(); }catch(e){}
+      }
     }
   }
 
@@ -2272,11 +2453,25 @@ function entriesFromDoc(text){
 
   // 语音列表是异步加载的，先触发一次
   try{
-    synth.getVoices();
-    if(typeof synth.onvoiceschanged !== 'undefined'){
-      synth.onvoiceschanged = function(){ voicesLoaded = true; };
+    if(synth){
+      synth.getVoices();
+      if(typeof synth.onvoiceschanged !== 'undefined'){
+        synth.onvoiceschanged = function(){ voicesLoaded = true; };
+      }
     }
   }catch(e){}
+
+  // 启动时静默探测引擎，提前把状态显示出来（不发声）
+  (async function initEngine(){
+    let ok = false;
+    try{ ok = await probeSystem(); }catch(e){ ok = false; }
+    engine = ok ? 'system' : 'online';
+    updateEngineHint();
+    if(stateEl){
+      stateEl.textContent = ok ? '系统语音就绪' : '在线语音（需联网）';
+      stateEl.style.color = ok ? '#15803d' : '#b45309';
+    }
+  })();
 
   // 页面切到后台时停掉，避免后台乱响
   document.addEventListener('visibilitychange', function(){

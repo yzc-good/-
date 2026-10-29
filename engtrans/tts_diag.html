@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TTS 诊断</title>
+<style>
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#f4f6fb;color:#1e2430;padding:18px;font-size:15px;line-height:1.7}
+h1{font-size:19px;margin-bottom:14px}
+.card{background:#fff;border:1px solid #e5e9f0;border-radius:12px;padding:14px;margin-bottom:14px}
+h2{font-size:15px;margin-bottom:8px;color:#2563eb}
+.row{display:flex;gap:8px;padding:5px 0;border-bottom:1px dashed #eee}
+.row:last-child{border:none}
+.k{flex:0 0 190px;color:#6b7280}
+.v{flex:1;font-weight:600;word-break:break-all}
+.ok{color:#15803d}.bad{color:#b91c1c}.warn{color:#b45309}
+pre{background:#f6f8fc;border-radius:8px;padding:10px;font-size:12.5px;overflow:auto;white-space:pre-wrap}
+button{font-size:14px;padding:9px 16px;border-radius:9px;border:none;background:#2563eb;color:#fff;font-weight:600;margin:4px 6px 4px 0}
+button.gray{background:#fff;color:#2563eb;border:1px solid #bfdbfe}
+</style>
+</head>
+<body>
+<h1>🔍 语音朗读能力诊断</h1>
+
+<div class="card">
+  <h2>1. API 是否存在</h2>
+  <div id="api"></div>
+</div>
+
+<div class="card">
+  <h2>2. 可用语音列表</h2>
+  <div id="voices"><span class="v warn">读取中…</span></div>
+</div>
+
+<div class="card">
+  <h2>3. 实际发声测试</h2>
+  <div style="margin-bottom:8px">点下面按钮，<b>把平板音量调大</b>，看是否有声音。</div>
+  <button onclick="testSpeak('Hello, this is a voice test.')">🔊 英文测试</button>
+  <button onclick="testSpeak('这是中文语音测试。')">🔊 中文测试</button>
+  <button class="gray" onclick="testCancel()">⏹ 停止</button>
+  <div id="speakLog" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <h2>4. 在线语音（备用方案）</h2>
+  <div style="margin-bottom:8px">如果上面没声音，试试这个在线合成（需要联网）：</div>
+  <button onclick="testOnline()">🌐 播放在线英文语音</button>
+  <div id="onlineLog" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <h2>5. 环境信息</h2>
+  <pre id="env"></pre>
+</div>
+
+<script>
+function row(k,v,cls){
+  return '<div class="row"><div class="k">'+k+'</div><div class="v '+(cls||'')+'">'+v+'</div></div>';
+}
+(function diagApi(){
+  var s = window.speechSynthesis;
+  var U = window.SpeechSynthesisUtterance;
+  var out = '';
+  out += row('speechSynthesis', s ? '<span class="ok">存在</span>' : '<span class="bad">不存在</span>', '');
+  out += row('SpeechSynthesisUtterance', U ? '<span class="ok">存在</span>' : '<span class="bad">不存在</span>', '');
+  out += row('speechSynthesis.speaking', s ? String(s.speaking) : '—');
+  out += row('speechSynthesis.pending', s ? String(s.pending) : '—');
+  out += row('speechSynthesis.paused', s ? String(s.paused) : '—');
+  document.getElementById('api').innerHTML = out;
+
+  document.getElementById('env').textContent =
+    'UA: ' + navigator.userAgent + '\n' +
+    'platform: ' + (navigator.platform||'-') + '\n' +
+    'onLine: ' + navigator.onLine + '\n' +
+    'screen: ' + screen.width + 'x' + screen.height + '\n' +
+    'devicePixelRatio: ' + (window.devicePixelRatio||1) + '\n' +
+    'Capacitor: ' + (window.Capacitor ? ('存在, nativePlatform=' + window.Capacitor.isNativePlatform) : '不存在') + '\n' +
+    'Audio 支持: ' + (typeof Audio !== 'undefined') + '\n' +
+    'fetch 支持: ' + (typeof fetch !== 'undefined') + '\n' +
+    'origin: ' + location.origin;
+})();
+
+// 语音列表（异步加载，多等几次）
+var tries = 0;
+function loadVoices(){
+  var s = window.speechSynthesis;
+  if(!s){ document.getElementById('voices').innerHTML = '<span class="v bad">speechSynthesis 不存在，无法读取语音</span>'; return; }
+  var vs = s.getVoices() || [];
+  if(vs.length){
+    var en = vs.filter(function(v){ return /en/i.test(v.lang||''); });
+    var zh = vs.filter(function(v){ return /zh|cmn/i.test(v.lang||''); });
+    var h = row('语音总数', vs.length + ' 个');
+    h += row('英文语音', en.length ? '<span class="ok">'+en.length+' 个</span>' : '<span class="bad">0 个（缺少英文语音包）</span>');
+    h += row('中文语音', zh.length ? '<span class="ok">'+zh.length+' 个</span>' : '<span class="warn">0 个</span>');
+    h += '<pre>' + vs.map(function(v){
+      return (v.name||'?') + '  |  lang=' + (v.lang||'?') + '  |  local=' + (v.localService?'是':'否');
+    }).join('\n') + '</pre>';
+    document.getElementById('voices').innerHTML = h;
+  } else {
+    tries++;
+    if(tries > 12){
+      document.getElementById('voices').innerHTML =
+        '<span class="v bad">12 次尝试后仍为 0 个语音</span>' +
+        '<div style="margin-top:8px;color:#6b7280">说明系统没有可用的 TTS 引擎或未安装语音包。</div>';
+    } else {
+      document.getElementById('voices').innerHTML = '<span class="v warn">读取中…（第 '+tries+' 次，共 12 次）</span>';
+      setTimeout(loadVoices, 400);
+    }
+  }
+}
+loadVoices();
+
+function log(id, msg, cls){
+  var el = document.getElementById(id);
+  el.innerHTML += '<div class="'+(cls||'v')+'">'+msg+'</div>';
+}
+
+function testSpeak(text){
+  document.getElementById('speakLog').innerHTML = '';
+  var s = window.speechSynthesis;
+  if(!s){ log('speakLog','❌ speechSynthesis 不存在，无法发声','bad'); return; }
+  var U = window.SpeechSynthesisUtterance;
+  if(!U){ log('speakLog','❌ SpeechSynthesisUtterance 不存在','bad'); return; }
+  log('speakLog','▶ 开始合成：'+text);
+  var u = new U(text);
+  u.lang = /[\u4e00-\u9fff]/.test(text) ? 'zh-CN' : 'en-US';
+  u.rate = 1;
+  u.onstart = function(){ log('speakLog','✅ onstart 触发（已开始播放）','ok'); };
+  u.onend   = function(){ log('speakLog','✅ onend 触发（播放结束）','ok'); };
+  u.onerror = function(e){ log('speakLog','❌ onerror：'+(e && e.error) ,'bad'); };
+  try{
+    s.speak(u);
+    log('speakLog','已调用 speak()，speaking='+s.speaking+' pending='+s.pending);
+    setTimeout(function(){
+      log('speakLog','1.5秒后：speaking='+s.speaking+' pending='+s.pending+' paused='+s.paused, 'warn');
+    }, 1500);
+  }catch(e){
+    log('speakLog','❌ speak() 抛异常：'+e.message,'bad');
+  }
+}
+function testCancel(){
+  try{ window.speechSynthesis.cancel(); log('speakLog','已 cancel()','warn'); }catch(e){}
+}
+
+function testOnline(){
+  document.getElementById('onlineLog').innerHTML = '';
+  var text = 'Hammerheads are a group of sharks that we have been pretty concerned about.';
+  var url = 'https://fanyi.baidu.com/gettts?lan=en&text=' + encodeURIComponent(text) + '&spd=3&source=web';
+  log('onlineLog','请求：'+url.slice(0,80)+'…');
+  // 方式1：直接 fetch 成 blob
+  fetch(url, {headers:{'Accept':'audio/mpeg'}}).then(function(r){
+    log('onlineLog','fetch 返回 status='+r.status+' type='+(r.headers.get('content-type')||'-'),'ok');
+    return r.blob();
+  }).then(function(b){
+    log('onlineLog','blob 大小='+b.size+' bytes','ok');
+    if(!b.size){ log('onlineLog','❌ blob 为空','bad'); return; }
+    var a = new Audio(URL.createObjectURL(b));
+    a.onplay  = function(){ log('onlineLog','✅ 开始播放','ok'); };
+    a.onerror = function(){ log('onlineLog','❌ 播放出错','bad'); };
+    a.onended = function(){ log('onlineLog','✅ 播放结束','ok'); };
+    a.play().catch(function(e){ log('onlineLog','❌ play() 失败：'+e.message,'bad'); });
+  }).catch(function(e){
+    log('onlineLog','❌ fetch 失败（很可能是 CORS）：'+e.message,'bad');
+    // 方式2：直接当 img/audio src 塞进去
+    log('onlineLog','改用 Audio 直接加载 URL 试试…','warn');
+    var a2 = new Audio(url);
+    a2.onerror = function(){ log('onlineLog','❌ Audio 直接加载也失败','bad'); };
+    a2.play().then(function(){ log('onlineLog','✅ Audio 直接加载播放成功','ok'); })
+      .catch(function(err){ log('onlineLog','❌ Audio 播放失败：'+err.message,'bad'); });
+  });
+}
+</script>
+</body>
+</html>
