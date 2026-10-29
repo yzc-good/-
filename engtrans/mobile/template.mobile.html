@@ -2414,7 +2414,12 @@ function entriesFromDoc(text){
     }
   }
 
-  if(playBtn) playBtn.addEventListener('click', function(){ playFrom(0); });
+  // ▶ 朗读全文：始终从头开始（想从中间开始，直接点那一句即可）
+  if(playBtn) playBtn.addEventListener('click', function(){
+    if(!currentEntries.length){ setState('请先导入文章'); return; }
+    if(playing && !paused){ playFrom(idx, false); return; }   // 已在播 → 重读当前句
+    playFrom(0);
+  });
   if(pauseBtn) pauseBtn.addEventListener('click', pausePlay);
   if(stopBtn) stopBtn.addEventListener('click', function(){ stopPlay('已停止'); });
   if(prevBtn) prevBtn.addEventListener('click', function(){
@@ -2440,15 +2445,21 @@ function entriesFromDoc(text){
     if(playing && loopChk.checked) setState('循环开启');
   });
 
-  // 点击某句 = 从这句开始读（方便精听某一段）
+  // 点击某句 = 立即从这句开始读（方便精听某一段）
   content.addEventListener('click', function(ev){
+    // 点的是可点击单词 → 交给取词，不抢
+    if(ev.target.classList && ev.target.classList.contains('word')) return;
+    // 点在链接/按钮上也不要抢
+    const tag = (ev.target.tagName || '').toLowerCase();
+    if(tag === 'a' || tag === 'button') return;
+
     const entry = ev.target.closest ? ev.target.closest('.entry') : null;
     if(!entry) return;
-    // 点的是可点击单词就不抢（取词优先）
-    if(ev.target.classList && ev.target.classList.contains('word')) return;
     const i = Number(entry.getAttribute('data-i'));
-    if(isNaN(i)) return;
-    if(!playing){ idx = i; highlight(i); setState('第 '+(i+1)+' 句（点▶从此句朗读）'); }
+    if(isNaN(i) || !currentEntries[i]) return;
+
+    // 正在播放 → 跳到这句继续；没在播 → 从这句开始
+    playFrom(i);
   });
 
   // 语音列表是异步加载的，先触发一次
