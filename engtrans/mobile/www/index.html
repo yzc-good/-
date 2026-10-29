@@ -166,6 +166,23 @@ a.linkbtn:hover,button.linkbtn:hover{background:#e0e7ff}
 @media(min-width:821px) and (max-width:1100px){
   .right{width:300px}
 }
+/* ---------- 听力播放器 ---------- */
+.tts-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  padding:10px 14px;border-bottom:1px solid var(--line);background:#f0f7ff}
+.tts-btn{font-size:13px;padding:7px 12px;border-radius:8px;border:1px solid #bfdbfe;
+  background:#fff;color:#1d4ed8;font-weight:600;cursor:pointer;transition:.15s}
+.tts-btn:hover:not(:disabled){background:#e0efff}
+.tts-btn:disabled{opacity:.45;cursor:default}
+.tts-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tts-btn.primary:hover:not(:disabled){filter:brightness(1.08)}
+.tts-opt{font-size:12.5px;color:var(--muted);display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.tts-rate{gap:7px}
+.tts-rate input[type=range]{width:96px;vertical-align:middle}
+.tts-state{font-size:12px;color:#15803d;font-weight:600;margin-left:auto}
+/* 正在朗读的句子高亮 */
+.entry.tts-active{background:#dbeafe;box-shadow:inset 3px 0 0 var(--accent);
+  border-radius:8px;transition:background .15s}
+.entry.tts-active .en,.entry.tts-active .src-zh{font-weight:700}
 /* 平板横屏（宽而矮）：词典固定在右上方，避免被长段落挤到屏幕下方 */
 @media(min-width:821px) and (orientation:landscape){
   aside.right{
@@ -228,6 +245,21 @@ a.linkbtn:hover,button.linkbtn:hover{background:#e0e7ff}
           <option value="click">点击取词</option>
           <option value="hover">悬停取词</option>
         </select>
+      </div>
+      <!-- 听力播放器：逐句朗读 + 高亮跟随 -->
+      <div class="tts-bar" id="ttsBar">
+        <button class="tts-btn primary" id="ttsPlay" title="从头播放">▶ 朗读全文</button>
+        <button class="tts-btn" id="ttsPause" title="暂停 / 继续" disabled>⏸ 暂停</button>
+        <button class="tts-btn" id="ttsPrev" title="上一句">⏮</button>
+        <button class="tts-btn" id="ttsNext" title="下一句">⏭</button>
+        <button class="tts-btn" id="ttsStop" title="停止" disabled>⏹</button>
+        <label class="tts-opt"><input type="checkbox" id="ttsLoop"> 循环</label>
+        <label class="tts-opt"><input type="checkbox" id="ttsZh" checked> 读译文</label>
+        <label class="tts-opt tts-rate">
+          语速<input type="range" id="ttsRate" min="0.5" max="1.5" step="0.1" value="1">
+          <span id="ttsRateVal">1.0x</span>
+        </label>
+        <span class="tts-state" id="ttsState"></span>
       </div>
       <div class="body" id="content">
         <div class="loading">正在加载…</div>
@@ -1056,6 +1088,8 @@ function updateTr(idx, text){
 function renderBilingual(entries){
   currentWords = [];
   currentEntries = entries || [];
+  // 换文章 → 停止正在进行的朗读
+  if(typeof window.__ttsReset === 'function'){ try{ window.__ttsReset(); }catch(e){} }
   let html = '<div class="legend"><span><b>说明</b></span>'+
     '<span>第一行 = 原文</span><span>🟨 黄色 = 译文</span>'+
     '<span>■ 蓝色英文单词 = 可点击取词</span></div>';
@@ -1987,6 +2021,274 @@ function entriesFromDoc(text){
 }
 
 // --- 本地解析+导入任意文档 ---
+// ===================== 听力朗读（方案A：系统 TTS） =====================
+// 边看边听：逐句朗读，当前句高亮并自动滚入视野。
+// 用浏览器内置 speechSynthesis，离线可用、零成本。
+(function(){
+  const bar     = document.getElementById('ttsBar');
+  if(!bar) return;
+  const playBtn  = document.getElementById('ttsPlay');
+  const pauseBtn = document.getElementById('ttsPause');
+  const prevBtn  = document.getElementById('ttsPrev');
+  const nextBtn  = document.getElementById('ttsNext');
+  const stopBtn  = document.getElementById('ttsStop');
+  const loopChk  = document.getElementById('ttsLoop');
+  const zhChk    = document.getElementById('ttsZh');
+  const rateRng  = document.getElementById('ttsRate');
+  const rateVal  = document.getElementById('ttsRateVal');
+  const stateEl  = document.getElementById('ttsState');
+
+  const synth = window.speechSynthesis || null;
+  if(!synth){
+    bar.classList.add('tts-unsupported');
+    if(stateEl) stateEl.textContent = '此设备不支持语音朗读';
+    if(playBtn) playBtn.disabled = true;
+    return;
+  }
+
+  let idx = 0;              // 当前读到第几句
+  let playing = false;      // 正在播放整篇
+  let paused = false;
+  let token = 0;            // 每次操作递增，用于作废旧的回调
+  let watchdog = 0;         // onend 不触发时的兜底定时器
+  let voicesLoaded = false;
+
+  const RATE = () => (rateRng ? Number(rateRng.value) : 1) || 1;
+  const wantZh = () => !!(zhChk && zhChk.checked);
+
+  function setState(t){ if(stateEl) stateEl.textContent = t || ''; }
+
+  function syncButtons(){
+    if(playBtn)  playBtn.disabled  = playing && !paused;
+    if(pauseBtn) pauseBtn.disabled = !playing;
+    if(stopBtn)  stopBtn.disabled  = !playing;
+    if(prevBtn)  prevBtn.disabled  = !currentEntries.length;
+    if(nextBtn)  nextBtn.disabled  = !currentEntries.length;
+    if(pauseBtn) pauseBtn.textContent = paused ? '▶ 继续' : '⏸ 暂停';
+  }
+
+  // 选出某句要读的文本：英文原文 + （可选）中文译文
+  function textOf(i){
+    const e = currentEntries[i];
+    if(!e) return null;
+    const en = (e.dir === 'zh2en') ? (e.en || '') : (e.en || '');
+    const zh = (e.dir === 'zh2en') ? (e.zh || '') : (e.zh || '');
+    // 英文优先；中文只有勾选且已翻译才读
+    return { en: en.trim(), zh: zh.trim() };
+  }
+
+  function isEnglishText(t){ return /[A-Za-z]/.test(t) && !/[\u4e00-\u9fff]/.test(t); }
+
+  function pickVoice(lang){
+    const vs = synth.getVoices() || [];
+    if(!vs.length) return null;
+    const want = lang.slice(0,2).toLowerCase();
+    // 优先精确匹配语言，再退到前缀匹配
+    let best = null;
+    for(const v of vs){
+      if(v.lang && v.lang.toLowerCase() === lang.toLowerCase()){ best = v; break; }
+    }
+    if(!best){
+      for(const v of vs){
+        if(v.lang && v.lang.toLowerCase().indexOf(want) === 0){ best = v; break; }
+      }
+    }
+    // 英文优先挑本地/自然度高的（名称含 Google/Natural 的通常更好）
+    if(best && want === 'en'){
+      const better = vs.find(v => v.lang.toLowerCase().indexOf('en')===0 &&
+        /google|natural|samantha|daniel/i.test(v.name||''));
+      if(better) best = better;
+    }
+    return best;
+  }
+
+  function clearHighlight(){
+    const all = content.querySelectorAll('.entry.tts-active');
+    for(let i=0;i<all.length;i++) all[i].classList.remove('tts-active');
+  }
+
+  function highlight(i){
+    clearHighlight();
+    const el = content.querySelector('.entry[data-i="'+i+'"]');
+    if(!el) return;
+    el.classList.add('tts-active');
+    // 滚入视野（尽量居中，别被顶部工具条挡住）
+    try{
+      const r = el.getBoundingClientRect();
+      const vh = window.innerHeight;
+      if(r.top < 90 || r.bottom > vh - 40){
+        el.scrollIntoView({block:'center', behavior:'smooth'});
+      }
+    }catch(e){ try{ el.scrollIntoView(); }catch(e2){} }
+  }
+
+  function cancelWatchdog(){ if(watchdog){ clearTimeout(watchdog); watchdog = 0; } }
+
+  // 朗读一句；读完调用 done()
+  function speakOne(text, lang, done){
+    const myToken = token;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    u.rate = Math.max(0.5, Math.min(2, RATE()));
+    const v = pickVoice(lang);
+    if(v) u.voice = v;
+
+    let finished = false;
+    const finish = function(){
+      if(finished) return;
+      finished = true;
+      cancelWatchdog();
+      if(myToken !== token) return;   // 已被新的操作取代
+      done();
+    };
+
+    u.onend = finish;
+    u.onerror = finish;   // 出错也往下走，避免整篇卡死
+
+    // 安卓 WebView 上 onend 经常不触发 → 按估算时长兜底
+    // 英文约 2.6 词/秒、中文约 4 字/秒，再乘语速
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+    const est = Math.max(1.2, (words/2.6 + cjk/4) / RATE()) * 1000;
+    cancelWatchdog();
+    watchdog = setTimeout(finish, est + 1800);
+
+    try{ synth.speak(u); }catch(e){ finish(); }
+  }
+
+  // 读第 i 句：先英文，再（可选）中文；读完继续下一句
+  // bump=false 表示「接着播」：沿用当前 token，不要把上一句的回调作废
+  function playFrom(i, bump){
+    if(!currentEntries.length){ setState('请先导入文章'); return; }
+    if(i < 0 || i >= currentEntries.length){
+      // 到尾了
+      if(loopChk && loopChk.checked){ i = 0; }
+      else { stopPlay('✅ 朗读完毕'); return; }
+    }
+    idx = i;
+    playing = true; paused = false;
+    if(bump !== false){ token++; }
+    const myToken = token;
+    syncButtons();
+    setState('朗读中 ' + (i+1) + '/' + currentEntries.length);
+
+    const parts = textOf(i);
+    if(!parts){ stopPlay(''); return; }
+    highlight(i);
+
+    // 组装本句要读的片段
+    const seqs = [];
+    if(parts.en) seqs.push({ text: parts.en, lang: isEnglishText(parts.en) ? 'en-US' : 'zh-CN' });
+    if(wantZh() && parts.zh && !isEnglishText(parts.zh)) seqs.push({ text: parts.zh, lang: 'zh-CN' });
+
+    if(!seqs.length){
+      // 这句没有可读内容（例如整句未翻译的中文），跳过
+      if(myToken === token) playFrom(i+1, false);
+      return;
+    }
+
+    let k = 0;
+    const step = function(){
+      if(myToken !== token || !playing) return;
+      if(k >= seqs.length){
+        // 本句读完 → 下一句（留一点间隔更自然）
+        setTimeout(function(){
+          if(myToken === token && playing && !paused) playFrom(i+1, false);
+        }, 260);
+        return;
+      }
+      const s = seqs[k++];
+      speakOne(s.text, s.lang, step);
+    };
+    step();
+  }
+
+  function stopPlay(msg){
+    token++;
+    playing = false; paused = false;
+    cancelWatchdog();
+    try{ synth.cancel(); }catch(e){}
+    clearHighlight();
+    syncButtons();
+    setState(msg || '');
+  }
+
+  function pausePlay(){
+    if(!playing) return;
+    if(paused){
+      paused = false;
+      syncButtons();
+      setState('朗读中 ' + (idx+1) + '/' + currentEntries.length);
+      try{ synth.resume(); }catch(e){}
+      // 某些设备 resume 无效 → 重新读当前句
+      if(!synth.speaking && !synth.pending){
+        const back = token; playFrom(idx);
+        token = back;
+      }
+    } else {
+      paused = true;
+      syncButtons();
+      setState('已暂停');
+      try{ synth.pause(); }catch(e){}
+    }
+  }
+
+  if(playBtn) playBtn.addEventListener('click', function(){ playFrom(0); });
+  if(pauseBtn) pauseBtn.addEventListener('click', pausePlay);
+  if(stopBtn) stopBtn.addEventListener('click', function(){ stopPlay('已停止'); });
+  if(prevBtn) prevBtn.addEventListener('click', function(){
+    if(!currentEntries.length) return;
+    const t = Math.max(0, idx - 1);
+    idx = t; highlight(t);
+    if(playing) playFrom(t); else setState('第 '+(t+1)+' 句（点▶从此句朗读）');
+  });
+  if(nextBtn) nextBtn.addEventListener('click', function(){
+    if(!currentEntries.length) return;
+    const t = Math.min(currentEntries.length-1, idx + 1);
+    idx = t; highlight(t);
+    if(playing) playFrom(t); else setState('第 '+(t+1)+' 句（点▶从此句朗读）');
+  });
+  if(rateRng) rateRng.addEventListener('input', function(){
+    if(rateVal) rateVal.textContent = RATE().toFixed(1) + 'x';
+  });
+  if(zhChk) zhChk.addEventListener('change', function(){
+    // 改了是否读译文，若正在播放则从当前句重来
+    if(playing) playFrom(idx);
+  });
+  if(loopChk) loopChk.addEventListener('change', function(){
+    if(playing && loopChk.checked) setState('循环开启');
+  });
+
+  // 点击某句 = 从这句开始读（方便精听某一段）
+  content.addEventListener('click', function(ev){
+    const entry = ev.target.closest ? ev.target.closest('.entry') : null;
+    if(!entry) return;
+    // 点的是可点击单词就不抢（取词优先）
+    if(ev.target.classList && ev.target.classList.contains('word')) return;
+    const i = Number(entry.getAttribute('data-i'));
+    if(isNaN(i)) return;
+    if(!playing){ idx = i; highlight(i); setState('第 '+(i+1)+' 句（点▶从此句朗读）'); }
+  });
+
+  // 语音列表是异步加载的，先触发一次
+  try{
+    synth.getVoices();
+    if(typeof synth.onvoiceschanged !== 'undefined'){
+      synth.onvoiceschanged = function(){ voicesLoaded = true; };
+    }
+  }catch(e){}
+
+  // 页面切到后台时停掉，避免后台乱响
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden && playing) stopPlay('');
+  });
+
+  // 换文章时停止朗读
+  window.__ttsReset = function(){ stopPlay(''); idx = 0; };
+  syncButtons();
+  if(stateEl && !stateEl.textContent) setState('');
+})();
+
 async function parseAndImport(file){
   const ext = (file.name.split('.').pop()||'').toLowerCase();
   const buf = await file.arrayBuffer();
@@ -2013,8 +2315,7 @@ async function parseAndImport(file){
   }
 }
 
-// 覆盖：独立 App 不需本地服务 —— checkBackend 恒真、offlineBanner 无操作
-async function checkBackend(){ return true; }
+// 覆盖：独立 App 不需本地服务 —— checkBackend 恒真、offlineBanner 无操作async function checkBackend(){ return true; }
 function offlineBanner(){ showBanner('info','独立 App 模式：词典与取词离线可用，联网查词/翻译需要网络。'); }
 
 // init
