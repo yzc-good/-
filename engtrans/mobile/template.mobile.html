@@ -2060,6 +2060,7 @@ function entriesFromDoc(text){
   let token = 0;            // 每次操作递增，用于作废旧的回调
   let watchdog = 0;         // onend 不触发时的兜底定时器
   let voicesLoaded = false;
+  let singleMode = false;   // 当前是否处于「只读一句」模式
 
   const RATE = () => (rateRng ? Number(rateRng.value) : 1) || 1;
   const wantZh = () => !!(zhChk && zhChk.checked);
@@ -2302,13 +2303,16 @@ function entriesFromDoc(text){
 
   // 读第 i 句：先英文，再（可选）中文；读完继续下一句
   // bump=false 表示「接着播」：沿用当前 token，不要把上一句的回调作废
-  function playFrom(i, bump){
+  // singleOnly=true 表示「只读这一句，读完就停」（点句朗读用）
+  function playFrom(i, bump, singleOnly){
     if(!currentEntries.length){ setState('请先导入文章'); return; }
     if(i < 0 || i >= currentEntries.length){
       // 到尾了
       if(loopChk && loopChk.checked){ i = 0; }
       else { stopPlay('✅ 朗读完毕'); return; }
     }
+    const single = !!singleOnly;
+    singleMode = single;
     idx = i;
     playing = true; paused = false;
     if(bump !== false){ token++; }
@@ -2322,18 +2326,10 @@ function entriesFromDoc(text){
         if(myToken !== token) return;
         engine = ok ? 'system' : 'online';
         updateEngineHint();
-        if(engine === 'online' && stateEl){
-          setState('在线语音 · 第 ' + (idx+1) + '/' + currentEntries.length);
-        } else {
-          setState('朗读中 ' + (idx+1) + '/' + currentEntries.length);
-        }
         startSeqs();
       });
       return;
     }
-    setState('朗读中 ' + (i+1) + '/' + currentEntries.length);
-    var parts0 = textOf(i);
-    if(!parts0){ stopPlay(''); return; }
     highlight(i);
     startSeqs();
 
@@ -2341,6 +2337,9 @@ function entriesFromDoc(text){
       const parts = textOf(i);
       if(!parts){ stopPlay(''); return; }
       highlight(i);
+      if(stateEl && engine === 'online'){
+        setState('在线语音 · ' + (single ? '第 '+(i+1)+' 句' : (i+1)+'/'+currentEntries.length));
+      }
 
       // 组装本句要读的片段
       const seqs = [];
@@ -2348,8 +2347,10 @@ function entriesFromDoc(text){
       if(wantZh() && parts.zh && !isEnglishText(parts.zh)) seqs.push({ text: parts.zh, lang: 'zh-CN' });
 
       if(!seqs.length){
-        // 这句没有可读内容（例如整句未翻译的中文），跳过
-        if(myToken === token) playFrom(i+1, false);
+        // 这句没有可读内容（例如整句未翻译的中文）
+        if(myToken !== token) return;
+        if(single){ stopPlay('本句无可朗读内容'); return; }
+        playFrom(i+1, false);
         return;
       }
 
@@ -2357,7 +2358,13 @@ function entriesFromDoc(text){
       const step = function(){
         if(myToken !== token || !playing) return;
         if(k >= seqs.length){
-          // 本句读完 → 下一句（留一点间隔更自然）
+          // 本句读完
+          if(single){
+            // 单句模式：读完这一句就停，不再往下
+            if(myToken === token && playing) stopPlay('✅ 第 ' + (i+1) + ' 句朗读完毕');
+            return;
+          }
+          // 连读模式 → 下一句（留一点间隔更自然）
           setTimeout(function(){
             if(myToken === token && playing && !paused) playFrom(i+1, false);
           }, engine === 'online' ? 120 : 260);
@@ -2391,15 +2398,15 @@ function entriesFromDoc(text){
       // 继续
       paused = false;
       syncButtons();
-      setState('朗读中 ' + (idx+1) + '/' + currentEntries.length);
+      setState(singleMode ? ('第 ' + (idx+1) + ' 句') : ('朗读中 ' + (idx+1) + '/' + currentEntries.length));
       if(engine === 'online'){
         if(curAudio){ try{ curAudio.play(); }catch(e){} }
-        else { playFrom(idx, false); }
+        else { playFrom(idx, false, singleMode); }
       } else {
         try{ if(synth) synth.resume(); }catch(e){}
         // 某些设备 resume 无效 → 重新读当前句
         if(synth && !synth.speaking && !synth.pending){
-          playFrom(idx, false);
+          playFrom(idx, false, singleMode);
         }
       }
     } else {
@@ -2414,32 +2421,36 @@ function entriesFromDoc(text){
     }
   }
 
-  // ▶ 朗读全文：始终从头开始（想从中间开始，直接点那一句即可）
+  // ▶ 朗读全文：始终从头开始、连读到末尾（点句单读后再点它也能正常全文朗读）
   if(playBtn) playBtn.addEventListener('click', function(){
     if(!currentEntries.length){ setState('请先导入文章'); return; }
-    if(playing && !paused){ playFrom(idx, false); return; }   // 已在播 → 重读当前句
-    playFrom(0);
+    playFrom(0, true, false);
   });
   if(pauseBtn) pauseBtn.addEventListener('click', pausePlay);
   if(stopBtn) stopBtn.addEventListener('click', function(){ stopPlay('已停止'); });
+  // ⏮⏭：单句模式下直接单读目标句；连读模式下跳转后继续连读
   if(prevBtn) prevBtn.addEventListener('click', function(){
     if(!currentEntries.length) return;
     const t = Math.max(0, idx - 1);
     idx = t; highlight(t);
-    if(playing) playFrom(t); else setState('第 '+(t+1)+' 句（点▶从此句朗读）');
+    if(playing) playFrom(t, true, singleMode);
+    else if(singleMode) playFrom(t, true, true);   // 单读过的句子，⏮ 继续单读
+    else setState('第 '+(t+1)+' 句（点该句即朗读）');
   });
   if(nextBtn) nextBtn.addEventListener('click', function(){
     if(!currentEntries.length) return;
     const t = Math.min(currentEntries.length-1, idx + 1);
     idx = t; highlight(t);
-    if(playing) playFrom(t); else setState('第 '+(t+1)+' 句（点▶从此句朗读）');
+    if(playing) playFrom(t, true, singleMode);
+    else if(singleMode) playFrom(t, true, true);   // 单读过的句子，⏭ 继续单读
+    else setState('第 '+(t+1)+' 句（点该句即朗读）');
   });
   if(rateRng) rateRng.addEventListener('input', function(){
     if(rateVal) rateVal.textContent = RATE().toFixed(1) + 'x';
   });
   if(zhChk) zhChk.addEventListener('change', function(){
-    // 改了是否读译文，若正在播放则从当前句重来
-    if(playing) playFrom(idx);
+    // 改了是否读译文，若正在播放则从当前句重来（保持当前单读/连读模式）
+    if(playing) playFrom(idx, true, singleMode);
   });
   if(loopChk) loopChk.addEventListener('change', function(){
     if(playing && loopChk.checked) setState('循环开启');
@@ -2458,8 +2469,8 @@ function entriesFromDoc(text){
     const i = Number(entry.getAttribute('data-i'));
     if(isNaN(i) || !currentEntries[i]) return;
 
-    // 正在播放 → 跳到这句继续；没在播 → 从这句开始
-    playFrom(i);
+    // 点某句 = 只朗读被点的这一句（读完即停，不往下读）
+    playFrom(i, true, true);
   });
 
   // 语音列表是异步加载的，先触发一次
